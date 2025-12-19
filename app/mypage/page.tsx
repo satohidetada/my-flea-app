@@ -2,37 +2,48 @@
 import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase/config";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import { collection, query, where, onSnapshot, getDocs } from "firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 export default function MyPage() {
   const [user, setUser] = useState<User | null>(null);
   const [purchasedItems, setPurchasedItems] = useState<any[]>([]);
+  const [sellingItems, setSellingItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       if (!currentUser) {
         router.push("/");
         return;
       }
       setUser(currentUser);
 
-      // 自分が購入者(buyerId)になっている商品を検索
-      const q = query(
+      // 1. 自分が購入者の商品を監視
+      const qPurchased = query(
         collection(db, "items"),
         where("buyerId", "==", currentUser.uid)
       );
+      const unsubPurchases = onSnapshot(qPurchased, (snapshot) => {
+        setPurchasedItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
 
-      const unsubPurchases = onSnapshot(q, (snapshot) => {
-        const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setPurchasedItems(items);
+      // 2. 自分が出品者の商品を監視
+      const qSelling = query(
+        collection(db, "items"),
+        where("sellerId", "==", currentUser.uid)
+      );
+      const unsubSelling = onSnapshot(qSelling, (snapshot) => {
+        setSellingItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         setLoading(false);
       });
 
-      return () => unsubPurchases();
+      return () => {
+        unsubPurchases();
+        unsubSelling();
+      };
     });
     return () => unsubscribe();
   }, [router]);
@@ -44,59 +55,81 @@ export default function MyPage() {
     }
   };
 
-  if (!user) return <div className="p-8 text-black">読み込み中...</div>;
+  if (!user) return <div className="p-8 text-black text-center">読み込み中...</div>;
 
   return (
-    <div className="min-h-screen bg-white text-black p-4 pb-20">
-      <header className="flex justify-between items-center mb-6">
-        <Link href="/" className="text-red-600 font-bold text-xl tracking-tighter">NOMI</Link>
+    <div className="min-h-screen bg-gray-50 text-black p-4 pb-20">
+      <header className="flex justify-between items-center mb-6 px-2">
+        <Link href="/" className="text-red-600 font-bold text-2xl tracking-tighter">NOMI</Link>
         <h1 className="text-lg font-bold">マイページ</h1>
       </header>
 
-      {/* プロフィール表示 */}
-      <div className="flex flex-col items-center py-6 border-b">
-        <div className="w-20 h-20 bg-gray-200 rounded-full mb-3 overflow-hidden border">
-          {user.photoURL && <img src={user.photoURL} alt="profile" />}
+      {/* プロフィール */}
+      <div className="bg-white rounded-3xl p-6 shadow-sm border mb-8 flex flex-col items-center">
+        <div className="w-20 h-20 bg-gray-200 rounded-full mb-3 overflow-hidden border-2 border-white shadow-md">
+          {user.photoURL ? <img src={user.photoURL} alt="profile" /> : <div className="w-full h-full bg-red-100 flex items-center justify-center text-red-400 text-2xl font-bold">{user.displayName?.[0]}</div>}
         </div>
-        <h2 className="text-xl font-bold">{user.displayName}</h2>
-        <p className="text-gray-500 text-sm">{user.email}</p>
+        <h2 className="text-xl font-bold">{user.displayName || "ユーザー"}</h2>
+        <p className="text-gray-400 text-sm">{user.email}</p>
       </div>
 
-      {/* 購入した商品一覧（取引チャットへのリンク） */}
-      <div className="mt-8">
-        <h3 className="text-lg font-bold mb-4 flex items-center">
-          <span className="mr-2">🛍️</span> 購入した商品（取引中）
+      {/* 出品した商品セクション */}
+      <section className="mb-10">
+        <h3 className="text-lg font-bold mb-4 px-2 flex items-center justify-between">
+          <span>📤 出品した商品</span>
+          <span className="text-xs font-normal text-gray-500">{sellingItems.length}件</span>
         </h3>
-        
-        {loading ? (
-          <p className="text-gray-400 text-sm">読み込み中...</p>
-        ) : purchasedItems.length > 0 ? (
+        {sellingItems.length > 0 ? (
+          <div className="space-y-3">
+            {sellingItems.map((item) => (
+              <div key={item.id} className="bg-white p-3 rounded-2xl flex items-center shadow-sm border">
+                <img src={item.imageUrl} className="w-16 h-16 object-cover rounded-xl mr-4" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm truncate">{item.name}</p>
+                  <p className="text-gray-500 text-xs">¥{item.price.toLocaleString()}</p>
+                  {item.isSold ? (
+                    <Link href={`/chat/${item.id}`} className="text-red-500 text-xs font-bold mt-1 inline-block bg-red-50 px-2 py-1 rounded">
+                      売却済：取引画面へ
+                    </Link>
+                  ) : (
+                    <Link href={`/items/${item.id}/edit`} className="text-blue-500 text-xs font-bold mt-1 inline-block bg-blue-50 px-2 py-1 rounded">
+                      出品中：編集する
+                    </Link>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-center py-8 text-gray-400 text-sm bg-white rounded-2xl border border-dashed">出品した商品はありません</p>
+        )}
+      </section>
+
+      {/* 購入した商品セクション */}
+      <section className="mb-10">
+        <h3 className="text-lg font-bold mb-4 px-2 flex items-center justify-between">
+          <span>🛍️ 購入した商品</span>
+          <span className="text-xs font-normal text-gray-500">{purchasedItems.length}件</span>
+        </h3>
+        {purchasedItems.length > 0 ? (
           <div className="space-y-3">
             {purchasedItems.map((item) => (
-              <Link key={item.id} href={`/chat/${item.id}`}>
-                <div className="flex items-center p-3 border rounded-xl hover:bg-gray-50 transition shadow-sm">
-                  <img src={item.imageUrl} alt={item.name} className="w-16 h-16 object-cover rounded-lg mr-4" />
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm truncate">{item.name}</p>
-                    <p className="text-blue-600 text-xs mt-1">タップして取引メッセージを送る</p>
-                  </div>
-                  <span className="text-gray-300 text-xl font-light">〉</span>
+              <Link key={item.id} href={`/chat/${item.id}`} className="bg-white p-3 rounded-2xl flex items-center shadow-sm border active:bg-gray-50 block">
+                <img src={item.imageUrl} className="w-16 h-16 object-cover rounded-xl mr-4" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm truncate">{item.name}</p>
+                  <p className="text-blue-500 text-xs font-bold mt-1">取引画面で連絡する</p>
                 </div>
+                <span className="text-gray-300">〉</span>
               </Link>
             ))}
           </div>
         ) : (
-          <div className="text-center py-10 border-2 border-dashed rounded-2xl bg-gray-50">
-            <p className="text-gray-400 text-sm">購入した商品はまだありません</p>
-            <Link href="/" className="text-red-500 text-sm font-bold mt-2 inline-block">商品を探しに行く</Link>
-          </div>
+          <p className="text-center py-8 text-gray-400 text-sm bg-white rounded-2xl border border-dashed">購入した商品はありません</p>
         )}
-      </div>
+      </section>
 
-      <button 
-        onClick={handleLogout}
-        className="w-full mt-12 p-4 bg-gray-100 text-red-600 rounded-xl font-bold hover:bg-red-50 transition"
-      >
+      <button onClick={handleLogout} className="w-full p-4 bg-white text-red-500 rounded-2xl font-bold border-2 border-red-50 shadow-sm active:bg-red-50">
         ログアウト
       </button>
     </div>
