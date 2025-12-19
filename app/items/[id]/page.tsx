@@ -1,34 +1,40 @@
-import { db } from "@/lib/firebase/config";
-import { doc, getDoc } from "firebase/firestore";
+"use client";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { db, auth } from "@/lib/firebase/config";
+import { doc, onSnapshot } from "firebase/firestore";
 import PurchaseButton from "@/components/PurchaseButton";
-import TransactionMessage from "@/components/TransactionMessage";
 import Link from "next/link";
+import { onAuthStateChanged } from "firebase/auth";
 
-export default async function ItemDetail({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = await params;
-  const itemId = resolvedParams.id;
+export default function ItemDetail() {
+  const { id } = useParams();
+  const router = useRouter();
+  const [item, setItem] = useState<any>(null);
+  const [user, setUser] = useState<any>(null);
 
-  const docRef = doc(db, "items", itemId);
-  const docSnap = await getDoc(docRef);
+  useEffect(() => {
+    onAuthStateChanged(auth, (u) => setUser(u));
 
-  if (!docSnap.exists()) {
-    return <div className="p-10 text-center">商品が見つかりません</div>;
-  }
+    // リアルタイムで商品情報を監視
+    const unsub = onSnapshot(doc(db, "items", id as string), (doc) => {
+      if (doc.exists()) {
+        setItem({ id: doc.id, ...doc.data() });
+      }
+    });
+    return () => unsub();
+  }, [id]);
 
-  const item = docSnap.data();
+  if (!item) return <div className="p-10 text-center text-black">読み込み中...</div>;
 
   return (
     <div className="max-w-2xl mx-auto p-4 text-black bg-gray-50 min-h-screen">
-      <Link href="/" className="text-blue-500 mb-4 inline-block hover:underline">← 戻る</Link>
+      <button onClick={() => router.push("/")} className="text-blue-500 mb-4 inline-block hover:underline">← 戻る</button>
       
       <div className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200">
         {item.imageUrl && (
-          <div className="relative h-96 w-full bg-gray-100">
-            <img 
-              src={item.imageUrl} 
-              alt={item.name} 
-              className="w-full h-full object-contain"
-            />
+          <div className="relative h-96 w-full bg-gray-100 text-center">
+            <img src={item.imageUrl} alt={item.name} className="w-full h-full object-contain mx-auto" />
           </div>
         )}
         
@@ -40,22 +46,29 @@ export default async function ItemDetail({ params }: { params: Promise<{ id: str
 
           <div className="border-t pt-4">
             <h2 className="font-bold text-lg mb-2 text-gray-700">商品の説明</h2>
-            <div className="bg-gray-50 p-4 rounded-xl text-gray-600 leading-relaxed whitespace-pre-wrap">
+            <div className="bg-gray-50 p-4 rounded-xl text-gray-600 whitespace-pre-wrap">
               {item.description || "説明はありません"}
             </div>
           </div>
 
           <div className="pt-4">
-            {item.isSold ? (
-              <div className="space-y-6">
-                <div className="w-full bg-gray-400 text-white p-4 rounded-full font-bold text-center text-xl shadow-inner">
+            {item.isSold || item.status === "sold" ? (
+              <div className="space-y-4">
+                <div className="w-full bg-gray-400 text-white p-4 rounded-xl font-bold text-center text-xl">
                   売り切れました
                 </div>
-                {/* 売り切れ（購入後）の場合のみメッセージ欄を表示 */}
-                <TransactionMessage itemId={itemId} />
+                {/* 自分が購入者か出品者ならチャットボタンを出す */}
+                {(user?.uid === item.buyerId || user?.uid === item.sellerId) && (
+                  <button 
+                    onClick={() => router.push(`/chat/${id}`)}
+                    className="w-full bg-blue-600 text-white p-4 rounded-xl font-bold text-center text-xl shadow-lg animate-bounce"
+                  >
+                    取引画面（チャット）へ移動
+                  </button>
+                )}
               </div>
             ) : (
-              <PurchaseButton itemId={itemId} sellerId={item.sellerId} />
+              <PurchaseButton itemId={id as string} sellerId={item.sellerId} />
             )}
           </div>
         </div>
