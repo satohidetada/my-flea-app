@@ -14,8 +14,8 @@ export default function UploadPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  // ★ご自身のGASウェブアプリURLをここに貼り付けてください
-  const GAS_URL = "ここにGASのURLを貼り付け";
+  // ★1でコピーした「ウェブアプリ URL」をここに貼り付けてください！
+  const GAS_URL = "1JaZDcllGXEWqhwn4QwdZFLIw7epwG2CtqHazAKAt86eRLCPv0h5PPmND";
   const SECRET_API_KEY = "my-secret-token-777";
 
   useEffect(() => {
@@ -38,18 +38,14 @@ export default function UploadPage() {
 
     setLoading(true);
     try {
-      // 1. 画像をBase64に変換
       const reader = new FileReader();
       const base64Promise = new Promise<string>((resolve) => {
-        reader.onload = () => {
-          const res = reader.result?.toString().split(",")[1];
-          resolve(res || "");
-        };
+        reader.onload = () => resolve(reader.result?.toString().split(",")[1] || "");
         reader.readAsDataURL(image);
       });
       const base64Data = await base64Promise;
 
-      // 2. GASのコードの変数名（apiKey, imageBase64等）に合わせて送信
+      // GASへの送信（リダイレクトを考慮し、フェッチ設定を最適化）
       const response = await fetch(GAS_URL, {
         method: "POST",
         body: JSON.stringify({
@@ -60,13 +56,17 @@ export default function UploadPage() {
         }),
       });
 
-      const result = await response.json();
-      
-      if (result.error) {
-        throw new Error(result.error);
+      const text = await response.text();
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch (err) {
+        throw new Error("GASからの応答がJSONではありません。デプロイ設定（全員に公開）を確認してください。");
       }
+      
+      if (result.error) throw new Error(result.error);
 
-      // 3. Firestoreに保存（GASから返ってきたURLを使用）
+      // Firestoreに保存
       await addDoc(collection(db, "items"), {
         name,
         price: Number(price),
@@ -82,7 +82,7 @@ export default function UploadPage() {
       router.push("/");
     } catch (error: any) {
       console.error("Upload Error:", error);
-      alert("エラーが発生しました: " + error.message);
+      alert("エラー: " + error.message);
     } finally {
       setLoading(false);
     }
@@ -106,7 +106,7 @@ export default function UploadPage() {
             <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} className="w-full border p-2 rounded" required />
           </div>
           <button type="submit" disabled={loading} className={`w-full py-3 rounded-lg font-bold text-white ${loading ? "bg-gray-400" : "bg-red-600 hover:bg-red-700"}`}>
-            {loading ? "ドライブへ保存中..." : "出品を確定する"}
+            {loading ? "送信中..." : "出品を確定する"}
           </button>
         </form>
       </div>
