@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { db } from "./lib/firebase";
+import { db } from "../lib/firebase";
 import { collection, query, orderBy, onSnapshot } from "firebase/firestore";
 import Link from "next/link";
 
@@ -18,7 +18,6 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-100 text-black">
       <header className="bg-white p-4 shadow-md flex justify-between items-center">
-        {/* ここを書き換えました！ */}
         <h1 className="text-2xl font-extrabold text-red-600 tracking-tighter">NOMI</h1>
         <div className="space-x-4">
           <Link href="/upload" className="bg-red-500 text-white px-4 py-2 rounded font-bold">出品する</Link>
