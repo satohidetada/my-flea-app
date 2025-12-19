@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { db, auth } from "../lib/firebase";
-import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc, getDoc } from "firebase/firestore";
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, User } from "firebase/auth";
+import { collection, query, orderBy, onSnapshot, doc, setDoc, deleteDoc } from "firebase/firestore";
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, User } from "firebase/auth";
 import Link from "next/link";
 
 export default function Home() {
@@ -14,7 +14,6 @@ export default function Home() {
     const unsubAuth = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        // ユーザーが「いいね」している商品のリストを監視
         const unsubLikes = onSnapshot(collection(db, "users", currentUser.uid, "likes"), (snap) => {
           const likes: Record<string, boolean> = {};
           snap.docs.forEach(doc => likes[doc.id] = true);
@@ -42,6 +41,13 @@ export default function Home() {
     await signInWithPopup(auth, provider);
   };
 
+  const logout = async () => {
+    if (confirm("ログアウトしますか？")) {
+      await signOut(auth);
+      alert("ログアウトしました");
+    }
+  };
+
   const toggleLike = async (e: React.MouseEvent, itemId: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -50,7 +56,6 @@ export default function Home() {
       login();
       return;
     }
-
     const likeRef = doc(db, "users", user.uid, "likes", itemId);
     if (userLikes[itemId]) {
       await deleteDoc(likeRef);
@@ -65,12 +70,15 @@ export default function Home() {
         <Link href="/">
           <h1 className="text-2xl font-extrabold text-red-600 tracking-tighter cursor-pointer">NOMI</h1>
         </Link>
-        <div className="flex items-center space-x-4">
-          <Link href="/upload" className="bg-red-500 text-white px-4 py-2 rounded font-bold">出品する</Link>
+        <div className="flex items-center space-x-3">
+          <Link href="/upload" className="bg-red-500 text-white px-3 py-2 rounded-lg font-bold text-sm">出品</Link>
           {user ? (
-            <Link href="/mypage" className="text-gray-600 font-medium">マイページ</Link>
+            <>
+              <Link href="/mypage" className="text-gray-600 text-sm font-medium">マイページ</Link>
+              <button onClick={logout} className="text-gray-400 text-xs border border-gray-200 px-2 py-1 rounded">ログアウト</button>
+            </>
           ) : (
-            <button onClick={login} className="text-gray-600 font-medium border border-gray-300 px-3 py-1 rounded">ログイン</button>
+            <button onClick={login} className="text-gray-600 text-sm font-medium border border-gray-300 px-3 py-1 rounded">ログイン</button>
           )}
         </div>
       </header>
@@ -87,7 +95,7 @@ export default function Home() {
                     <p className="text-red-500 font-bold text-lg">¥{item.price.toLocaleString()}</p>
                     <button 
                       onClick={(e) => toggleLike(e, item.id)}
-                      className={`text-xl transition ${userLikes[item.id] ? "text-red-500 scale-125" : "text-gray-300"}`}
+                      className={`text-xl transition ${userLikes[item.id] ? "text-red-500 scale-110" : "text-gray-300"}`}
                     >
                       {userLikes[item.id] ? "❤️" : "♡"}
                     </button>
