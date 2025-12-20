@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import { db, auth } from "@/lib/firebase/config";
 import { 
   doc, onSnapshot, deleteDoc, setDoc, updateDoc, increment, 
-  collection, addDoc, serverTimestamp, query, orderBy 
+  collection, addDoc, serverTimestamp, query, orderBy, getDoc
 } from "firebase/firestore";
 import Link from "next/link";
 import Header from "@/components/Header";
@@ -14,14 +14,24 @@ export default function ItemDetail() {
   const router = useRouter();
   const [item, setItem] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
+  const [seller, setSeller] = useState<any>(null); // ★ 出品者の詳細（県・自己紹介）用
   const [isLiked, setIsLiked] = useState(false);
-  const [comments, setComments] = useState<any[]>([]); // ★コメント一覧
-  const [newComment, setNewComment] = useState("");   // ★入力中のコメント
+  const [comments, setComments] = useState<any[]>([]); 
+  const [newComment, setNewComment] = useState("");   
 
   useEffect(() => {
     // 1. 商品情報のリアルタイム取得
-    const unsubItem = onSnapshot(doc(db, "items", id as string), (s) => {
-      if (s.exists()) setItem({ id: s.id, ...s.data() });
+    const unsubItem = onSnapshot(doc(db, "items", id as string), async (s) => {
+      if (s.exists()) {
+        const itemData = { id: s.id, ...s.data() };
+        setItem(itemData);
+
+        // ★ 出品者の詳細情報をFirestoreから1回だけ取得（県・自己紹介）
+        const sellerSnap = await getDoc(doc(db, "users", itemData.sellerId));
+        if (sellerSnap.exists()) {
+          setSeller(sellerSnap.data());
+        }
+      }
     });
 
     // 2. コメント一覧のリアルタイム取得
@@ -33,6 +43,7 @@ export default function ItemDetail() {
       setComments(s.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
+    // 3. ログイン状態と「いいね」の監視
     const unsubAuth = auth.onAuthStateChanged((u) => {
       setUser(u);
       if (u) {
@@ -46,17 +57,15 @@ export default function ItemDetail() {
     return () => { unsubItem(); unsubComments(); unsubAuth(); };
   }, [id]);
 
-// ★ コメント送信処理（修正版）
   const handleSendComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return alert("コメントするにはログインが必要です");
     if (!newComment.trim()) return;
 
-    const commentText = newComment; // メッセージを一時保存
-    setNewComment(""); // 送信ボタンを押した瞬間に中身を消す（UX向上）
+    const commentText = newComment;
+    setNewComment(""); 
 
     try {
-      // 1. コメントを保存
       await addDoc(collection(db, "items", id as string, "comments"), {
         text: commentText,
         senderId: user.uid,
@@ -65,7 +74,6 @@ export default function ItemDetail() {
         createdAt: serverTimestamp(),
       });
 
-      // 2. 通知作成は別の try-catch で囲む（ここが失敗してもユーザーには知らせない）
       if (user.uid !== item.sellerId) {
         try {
           await addDoc(collection(db, "users", item.sellerId, "notifications"), {
@@ -77,14 +85,11 @@ export default function ItemDetail() {
             createdAt: serverTimestamp(),
           });
         } catch (notifError) {
-          // 通知の保存に失敗しても、コンソールに記録するだけでユーザーには黙っておく
-          console.error("Notification failed but comment was sent:", notifError);
+          console.error("Notification failed:", notifError);
         }
       }
     } catch (e) {
-      // コメント保存そのものが失敗した場合のみ、ユーザーにアラートを出し、文字を戻す
-      console.error("Final comment error:", e);
-      alert("送信に失敗しました。ネット接続を確認してください。");
+      alert("送信に失敗しました。");
       setNewComment(commentText); 
     }
   };
@@ -113,7 +118,7 @@ export default function ItemDetail() {
     }
   };
 
-  if (!item) return <div className="p-10 text-center text-black">読み込み中...</div>;
+  if (!item) return <div className="p-10 text-center text-black font-bold">読み込み中...</div>;
   const isSeller = user?.uid === item.sellerId;
 
   return (
@@ -139,8 +144,18 @@ export default function ItemDetail() {
 
         {/* 商品情報 */}
         <div className="p-6 border-b">
-          <h1 className="text-2xl font-bold mb-2">{item.name}</h1>
+          <div className="flex justify-between items-start mb-2">
+            <h1 className="text-2xl font-bold flex-1">{item.name}</h1>
+          </div>
+          
+          {/* 📍 出品者の県を表示 */}
+          <div className="flex items-center gap-1 text-gray-500 text-xs mb-4">
+            <span className="text-sm text-red-500">📍</span>
+            <span>取引場所: {seller?.prefecture || "未設定"}</span>
+          </div>
+
           <p className="text-3xl font-black text-red-600 mb-6">¥{item.price?.toLocaleString()}</p>
+          
           <div className="bg-gray-50 p-4 rounded-2xl mb-6">
             <h2 className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-widest">商品説明</h2>
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{item.description}</p>
@@ -161,9 +176,30 @@ export default function ItemDetail() {
               {item.isSold ? "売り切れました" : "購入手続きへ"}
             </Link>
           )}
+
+          {/* ★ 出品者プロフィールカード */}
+          <div className="mt-10 p-5 bg-gray-50 rounded-[2rem] border border-gray-100 shadow-inner">
+            <h3 className="text-[10px] font-bold text-gray-400 mb-4 tracking-widest uppercase">出品者プロフィール</h3>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden">
+                {seller?.photoURL ? (
+                  <img src={seller.photoURL} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-center pt-2">👤</div>
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-bold">{seller?.displayName || "ユーザー"}</p>
+                <p className="text-[10px] text-gray-400">活動エリア: {seller?.prefecture || "未設定"}</p>
+              </div>
+            </div>
+            <p className="text-xs text-gray-600 leading-relaxed italic">
+              {seller?.bio || "自己紹介はまだありません。"}
+            </p>
+          </div>
         </div>
 
-        {/* ★ コメントセクション */}
+        {/* コメントセクション */}
         <div className="p-6 bg-gray-50">
           <h2 className="text-sm font-bold mb-4 flex items-center gap-2">
             <span>💬</span> コメント ({comments.length})
@@ -186,7 +222,6 @@ export default function ItemDetail() {
             {comments.length === 0 && <p className="text-center text-xs text-gray-400 py-4 font-medium italic">コメントはまだありません</p>}
           </div>
 
-          {/* コメント入力欄 */}
           {!item.isSold && (
             <form onSubmit={handleSendComment} className="flex gap-2">
               <input 
@@ -194,7 +229,7 @@ export default function ItemDetail() {
                 value={newComment} 
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder="質問してみる..." 
-                className="flex-1 bg-white border border-gray-200 px-4 py-3 rounded-full text-sm outline-none focus:border-red-500 transition"
+                className="flex-1 bg-white border border-gray-200 px-4 py-3 rounded-full text-sm outline-none focus:border-red-500 transition shadow-sm"
               />
               <button className="bg-gray-900 text-white px-5 py-3 rounded-full text-sm font-bold active:scale-90 transition">送信</button>
             </form>
