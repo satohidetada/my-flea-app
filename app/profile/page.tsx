@@ -16,7 +16,7 @@ const PREFECTURES = [
   "熊本県", "大分県", "宮崎県", "鹿児島県", "沖縄県"
 ];
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycby8EALWBchN8UKI4_jbSOWTmfkheV4oUAfE1Wes687iBg612rOzO0PVc1vlmY8uTcU/exec";
+const GAS_URL = "https://script.google.com/macros/s/AKfycby-ey-a-JVlePfdJiCRO_aSNfMgUYnwahAaYKyV4909p7Wq4LvbgEu2cplNTjlsdLkA/exec";
 const SECRET_API_KEY = "my-secret-token-777"; 
 
 export default function ProfileEdit() {
