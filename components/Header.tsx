@@ -55,12 +55,22 @@ export default function Header() {
                 <div className="p-3 border-b bg-gray-50 text-[10px] font-bold text-gray-400 uppercase">お知らせ</div>
                 <div className="max-h-80 overflow-y-auto">
                   {notifications.length === 0 && <p className="p-6 text-center text-xs text-gray-400">通知はありません</p>}
-                  {notifications.map(n => (
-                    <Link key={n.id} href={n.link} onClick={() => markAsRead(n)} className={`block p-4 border-b last:border-0 hover:bg-gray-50 transition ${!n.isRead ? "bg-red-50/30" : ""}`}>
-                      <p className={`text-xs ${!n.isRead ? "font-bold text-black" : "text-gray-500"}`}>{n.body}</p>
-                      <p className="text-[9px] text-gray-400 mt-1">たった今</p>
-                    </Link>
-                  ))}
+                  {notifications.map(n => {
+                    // ★ URLが正しく解釈されるようスラッシュを補完
+                    const safeLink = n.link ? (n.link.startsWith('/') ? n.link : `/${n.link}`) : "/mypage";
+                    
+                    return (
+                      <Link 
+                        key={n.id} 
+                        href={safeLink} 
+                        onClick={() => markAsRead(n)} 
+                        className={`block p-4 border-b last:border-0 hover:bg-gray-50 transition ${!n.isRead ? "bg-red-50/30" : ""}`}
+                      >
+                        <p className={`text-xs ${!n.isRead ? "font-bold text-black" : "text-gray-500"}`}>{n.body}</p>
+                        <p className="text-[9px] text-gray-400 mt-1">たった今</p>
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             )}
