@@ -12,7 +12,7 @@ export default function MyPage() {
   const [sellingItems, setSellingItems] = useState<any[]>([]);
   const [purchasedItems, setPurchasedItems] = useState<any[]>([]);
   const [likedItems, setLikedItems] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState("selling"); // タブ管理
+  const [activeTab, setActiveTab] = useState("selling");
   const router = useRouter();
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export default function MyPage() {
         const snapSelling = await getDocs(qSelling);
         setSellingItems(snapSelling.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
-        // 2. 購入した商品
+        // 2. 購入（取引済）した商品
         const qPurchased = query(collection(db, "items"), where("buyerId", "==", u.uid), orderBy("soldAt", "desc"));
         const snapPurchased = await getDocs(qPurchased);
         setPurchasedItems(snapPurchased.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -36,7 +36,6 @@ export default function MyPage() {
         const likedItemIds = snapLikes.docs.map(d => d.id);
         
         if (likedItemIds.length > 0) {
-          // 商品IDの配列を使って、実際の各商品データを取得
           const itemsData = await Promise.all(
             likedItemIds.map(async (id) => {
               const d = await getDocs(query(collection(db, "items"), where("__name__", "==", id)));
@@ -79,28 +78,47 @@ export default function MyPage() {
   return (
     <div className="min-h-screen bg-gray-50 text-black">
       <Header />
-      <main className="max-w-2xl mx-auto p-4">
-        {/* プロフィール */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center mb-6">
-          <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-red-50 mb-3 bg-gray-100 shadow-sm">
+      <main className="max-w-2xl mx-auto p-4 pb-20">
+        
+        {/* プロフィールセクション */}
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 flex flex-col items-center mb-6">
+          <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white mb-4 bg-gray-100 shadow-md">
             {user.photoURL ? (
               <img src={user.photoURL} className="w-full h-full object-cover" alt="" />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-300 text-3xl">👤</div>
+              <div className="w-full h-full flex items-center justify-center text-gray-300 text-4xl">👤</div>
             )}
           </div>
-          <h2 className="text-lg font-bold">{user.displayName || "ユーザー"}</h2>
-          <div className="flex gap-2 mt-4">
-            <Link href="/profile" className="bg-gray-100 text-gray-700 px-4 py-2 rounded-full text-xs font-bold">プロフィール編集</Link>
-            <button onClick={handleLogout} className="border border-gray-200 text-gray-400 px-4 py-2 rounded-full text-xs font-bold">ログアウト</button>
+          <h2 className="text-xl font-bold mb-1">{user.displayName || "ユーザー"}</h2>
+          <p className="text-xs text-gray-400 mb-6">{user.email}</p>
+          
+          <div className="flex gap-2 w-full max-w-xs">
+            <Link href="/profile" className="flex-1 bg-gray-900 text-white text-center py-3 rounded-2xl text-xs font-bold active:scale-95 transition">
+              プロフィール編集
+            </Link>
+            <button onClick={handleLogout} className="flex-1 border border-gray-200 text-gray-400 py-3 rounded-2xl text-xs font-bold active:scale-95 transition">
+              ログアウト
+            </button>
           </div>
         </div>
+
+        {/* サポートボタン（目立つ位置に配置） */}
+        <Link 
+          href="/contact" 
+          className="flex justify-between items-center p-5 bg-white rounded-2xl text-sm font-bold shadow-sm border border-red-50 mb-6 hover:bg-red-50 transition active:scale-95"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-xl">💡</span>
+            <span className="text-gray-700">運営への要望・不具合報告</span>
+          </div>
+          <span className="text-red-400">›</span>
+        </Link>
 
         {/* タブ切り替えメニュー */}
         <div className="flex border-b border-gray-200 mb-6 bg-white rounded-t-2xl px-2">
           {[
             { id: "selling", label: "出品", count: sellingItems.length },
-            { id: "purchased", label: "購入", count: purchasedItems.length },
+            { id: "purchased", label: "取引済", count: purchasedItems.length },
             { id: "liked", label: "いいね", count: likedItems.length }
           ].map(tab => (
             <button
@@ -116,14 +134,14 @@ export default function MyPage() {
           ))}
         </div>
 
-        {/* コンテンツエリア */}
+        {/* 商品一覧グリッド */}
         <div className="grid grid-cols-2 gap-3">
           {activeTab === "selling" && sellingItems.map(item => <ItemCard key={item.id} item={item} />)}
           {activeTab === "purchased" && purchasedItems.map(item => <ItemCard key={item.id} item={item} />)}
           {activeTab === "liked" && likedItems.map(item => <ItemCard key={item.id} item={item} />)}
         </div>
 
-        {/* 空の状態 */}
+        {/* 空の状態の表示 */}
         {((activeTab === "selling" && sellingItems.length === 0) ||
           (activeTab === "purchased" && purchasedItems.length === 0) ||
           (activeTab === "liked" && likedItems.length === 0)) && (
