@@ -209,7 +209,7 @@ export default function UploadPage() {
                 loading ? "bg-gray-300" : "bg-black hover:bg-gray-800"
               }`}
             >
-              {loading ? "軽量化してアップロード中..." : "出品を確定する"}
+              {loading ? "アップロード中..." : "出品を確定する"}
             </button>
           </form>
         </div>
