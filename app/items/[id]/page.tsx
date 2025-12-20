@@ -2,7 +2,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { db, auth } from "@/lib/firebase/config";
-import { doc, getDoc, deleteDoc, setDoc, deleteField, onSnapshot, updateDoc, increment } from "firebase/firestore";
+import { 
+  doc, onSnapshot, deleteDoc, setDoc, updateDoc, increment, 
+  collection, addDoc, serverTimestamp, query, orderBy 
+} from "firebase/firestore";
 import Link from "next/link";
 import Header from "@/components/Header";
 
@@ -12,17 +15,27 @@ export default function ItemDetail() {
   const [item, setItem] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [isLiked, setIsLiked] = useState(false);
+  const [comments, setComments] = useState<any[]>([]); // ★コメント一覧
+  const [newComment, setNewComment] = useState("");   // ★入力中のコメント
 
   useEffect(() => {
-    // 商品情報の取得（リアルタイム監視に切り替え）
+    // 1. 商品情報のリアルタイム取得
     const unsubItem = onSnapshot(doc(db, "items", id as string), (s) => {
       if (s.exists()) setItem({ id: s.id, ...s.data() });
+    });
+
+    // 2. コメント一覧のリアルタイム取得
+    const qComments = query(
+      collection(db, "items", id as string, "comments"),
+      orderBy("createdAt", "asc")
+    );
+    const unsubComments = onSnapshot(qComments, (s) => {
+      setComments(s.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
     const unsubAuth = auth.onAuthStateChanged((u) => {
       setUser(u);
       if (u) {
-        // 自分がいいねしているかチェック
         const unsubLike = onSnapshot(doc(db, "users", u.uid, "likes", id as string), (s) => {
           setIsLiked(s.exists());
         });
@@ -30,20 +43,37 @@ export default function ItemDetail() {
       }
     });
 
-    return () => { unsubItem(); unsubAuth(); };
+    return () => { unsubItem(); unsubComments(); unsubAuth(); };
   }, [id]);
+
+  // ★ コメント送信処理
+  const handleSendComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return alert("コメントするにはログインが必要です");
+    if (!newComment.trim()) return;
+
+    try {
+      await addDoc(collection(db, "items", id as string, "comments"), {
+        text: newComment,
+        senderId: user.uid,
+        senderName: user.displayName || "匿名ユーザー",
+        senderPhoto: user.photoURL || "",
+        createdAt: serverTimestamp(),
+      });
+      setNewComment(""); // 入力欄を空にする
+    } catch (e) {
+      alert("送信に失敗しました");
+    }
+  };
 
   const toggleLike = async () => {
     if (!user) return alert("いいねするにはログインが必要です");
     const itemRef = doc(db, "items", id as string);
     const userLikeRef = doc(db, "users", user.uid, "likes", id as string);
-
     if (isLiked) {
-      // いいね解除
       await deleteDoc(userLikeRef);
       await updateDoc(itemRef, { likeCount: increment(-1) });
     } else {
-      // いいね登録
       await setDoc(userLikeRef, { createdAt: new Date() });
       await updateDoc(itemRef, { likeCount: increment(1) });
     }
@@ -61,13 +91,13 @@ export default function ItemDetail() {
   };
 
   if (!item) return <div className="p-10 text-center text-black">読み込み中...</div>;
-
   const isSeller = user?.uid === item.sellerId;
 
   return (
-    <div className="min-h-screen bg-white text-black pb-20">
+    <div className="min-h-screen bg-gray-50 text-black pb-20">
       <Header />
-      <div className="max-w-md mx-auto">
+      <div className="max-w-md mx-auto bg-white min-h-screen shadow-xl">
+        {/* 画像エリア */}
         <div className="relative aspect-square bg-gray-100">
           <img src={item.imageUrl} className="w-full h-full object-cover" />
           {item.isSold && (
@@ -75,35 +105,28 @@ export default function ItemDetail() {
               <span className="text-white font-black text-4xl border-4 border-white p-4 -rotate-12">SOLD OUT</span>
             </div>
           )}
-          {/* いいねボタン */}
           <button 
             onClick={toggleLike}
             className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm p-3 rounded-full shadow-lg flex items-center gap-2 active:scale-90 transition"
           >
-            <span className={isLiked ? "text-red-500" : "text-gray-400"}>
-              {isLiked ? "❤️" : "🤍"}
-            </span>
+            <span className={isLiked ? "text-red-500" : "text-gray-400"}>{isLiked ? "❤️" : "🤍"}</span>
             <span className="text-xs font-bold">{item.likeCount || 0}</span>
           </button>
         </div>
 
-        <div className="p-6">
+        {/* 商品情報 */}
+        <div className="p-6 border-b">
           <h1 className="text-2xl font-bold mb-2">{item.name}</h1>
           <p className="text-3xl font-black text-red-600 mb-6">¥{item.price?.toLocaleString()}</p>
-          
-          <div className="bg-gray-50 p-4 rounded-2xl mb-8">
-            <h2 className="text-xs font-bold text-gray-400 mb-2 uppercase tracking-widest">商品説明</h2>
+          <div className="bg-gray-50 p-4 rounded-2xl mb-6">
+            <h2 className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-widest">商品説明</h2>
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{item.description}</p>
           </div>
 
           {isSeller ? (
             <div className="space-y-3">
-              <Link href={`/items/${id}/edit`} className="block w-full bg-gray-800 text-white text-center font-bold py-4 rounded-2xl shadow-lg">
-                商品の編集
-              </Link>
-              <button onClick={handleDelete} className="w-full bg-white text-red-600 border-2 border-red-50 font-bold py-4 rounded-2xl">
-                この出品を削除する
-              </button>
+              <Link href={`/items/${id}/edit`} className="block w-full bg-gray-800 text-white text-center font-bold py-4 rounded-2xl shadow-lg">商品の編集</Link>
+              <button onClick={handleDelete} className="w-full bg-white text-red-600 border-2 border-red-50 font-bold py-4 rounded-2xl">この出品を削除する</button>
             </div>
           ) : (
             <Link 
@@ -114,6 +137,44 @@ export default function ItemDetail() {
             >
               {item.isSold ? "売り切れました" : "購入手続きへ"}
             </Link>
+          )}
+        </div>
+
+        {/* ★ コメントセクション */}
+        <div className="p-6 bg-gray-50">
+          <h2 className="text-sm font-bold mb-4 flex items-center gap-2">
+            <span>💬</span> コメント ({comments.length})
+          </h2>
+          
+          <div className="space-y-4 mb-6">
+            {comments.map((c) => (
+              <div key={c.id} className={`flex gap-3 ${c.senderId === item.sellerId ? "flex-row-reverse" : ""}`}>
+                <div className="w-8 h-8 rounded-full bg-gray-200 overflow-hidden flex-shrink-0">
+                  {c.senderPhoto ? <img src={c.senderPhoto} className="w-full h-full object-cover" /> : <div className="text-center pt-1 text-xs">👤</div>}
+                </div>
+                <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${
+                  c.senderId === item.sellerId ? "bg-red-100 text-red-800 rounded-tr-none" : "bg-white text-gray-800 rounded-tl-none border border-gray-200"
+                }`}>
+                  <p className="text-[10px] font-bold mb-1 opacity-60">{c.senderName} {c.senderId === item.sellerId && "(出品者)"}</p>
+                  <p>{c.text}</p>
+                </div>
+              </div>
+            ))}
+            {comments.length === 0 && <p className="text-center text-xs text-gray-400 py-4 font-medium italic">コメントはまだありません</p>}
+          </div>
+
+          {/* コメント入力欄 */}
+          {!item.isSold && (
+            <form onSubmit={handleSendComment} className="flex gap-2">
+              <input 
+                type="text" 
+                value={newComment} 
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="質問してみる..." 
+                className="flex-1 bg-white border border-gray-200 px-4 py-3 rounded-full text-sm outline-none focus:border-red-500 transition"
+              />
+              <button className="bg-gray-900 text-white px-5 py-3 rounded-full text-sm font-bold active:scale-90 transition">送信</button>
+            </form>
           )}
         </div>
       </div>
