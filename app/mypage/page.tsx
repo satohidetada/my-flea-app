@@ -2,19 +2,20 @@
 import { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebase/config";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { collection, query, where, getDocs, orderBy, doc, getDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, orderBy, doc, getDoc, or } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
 
 export default function MyPage() {
   const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null); // ★ 追加：Firestoreのユーザー詳細
+  const [profile, setProfile] = useState<any>(null);
   const [sellingItems, setSellingItems] = useState<any[]>([]);
   const [purchasedItems, setPurchasedItems] = useState<any[]>([]);
   const [likedItems, setLikedItems] = useState<any[]>([]);
+  const [chats, setChats] = useState<any[]>([]); // ★ 追加：チャット一覧
   const [activeTab, setActiveTab] = useState("selling");
-  const [loading, setLoading] = useState(true); // ★ 読み込み状態管理
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
@@ -22,7 +23,7 @@ export default function MyPage() {
       if (u) {
         setUser(u);
         
-        // 1. Firestoreから追加プロフィール情報を取得 (都道府県・自己紹介)
+        // 1. プロフィール情報取得
         const profileSnap = await getDoc(doc(db, "users", u.uid));
         if (profileSnap.exists()) {
           setProfile(profileSnap.data());
@@ -33,7 +34,7 @@ export default function MyPage() {
         const snapSelling = await getDocs(qSelling);
         setSellingItems(snapSelling.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
-        // 3. 購入（取引済）した商品
+        // 3. 購入済の商品
         const qPurchased = query(collection(db, "items"), where("buyerId", "==", u.uid), orderBy("soldAt", "desc"));
         const snapPurchased = await getDocs(qPurchased);
         setPurchasedItems(snapPurchased.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -42,16 +43,29 @@ export default function MyPage() {
         const qLikes = query(collection(db, "users", u.uid, "likes"));
         const snapLikes = await getDocs(qLikes);
         const likedItemIds = snapLikes.docs.map(d => d.id);
-        
         if (likedItemIds.length > 0) {
           const itemsData = await Promise.all(
             likedItemIds.map(async (id) => {
-              const d = await getDocs(query(collection(db, "items"), where("__name__", "==", id)));
-              return d.docs[0] ? { id: d.docs[0].id, ...d.docs[0].data() } : null;
+              const d = await getDoc(doc(db, "items", id));
+              return d.exists() ? { id: d.id, ...d.data() } : null;
             })
           );
           setLikedItems(itemsData.filter(i => i !== null));
         }
+
+        // 5. ★ 取引チャット一覧の取得 (自分が出品者 or 購入者のもの)
+        try {
+          const qChats = query(
+            collection(db, "chats"),
+            or(where("sellerId", "==", u.uid), where("buyerId", "==", u.uid)),
+            orderBy("updatedAt", "desc")
+          );
+          const snapChats = await getDocs(qChats);
+          setChats(snapChats.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        } catch (e) {
+          console.error("Chat fetch error:", e);
+        }
+
         setLoading(false);
       } else {
         router.push("/");
@@ -84,6 +98,27 @@ export default function MyPage() {
     </Link>
   );
 
+  // ★ チャット用カードコンポーネント
+  const ChatCard = ({ chat }: { chat: any }) => (
+    <Link href={`/chat/${chat.id}`} className="flex items-center gap-4 bg-white p-4 rounded-2xl border border-gray-100 mb-3 active:scale-95 transition shadow-sm">
+      <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center text-xl shadow-inner">💬</div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold truncate">{chat.itemName || "取引チャット"}</p>
+        <div className="flex items-center gap-2 mt-1">
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+            chat.status === "closed" ? "bg-gray-100 text-gray-400" : "bg-green-100 text-green-600"
+          }`}>
+            {chat.status === "closed" ? "取引完了" : "進行中"}
+          </span>
+          <span className="text-[10px] text-gray-400 font-medium">
+            {chat.sellerId === user.uid ? "出品" : "購入"}
+          </span>
+        </div>
+      </div>
+      <span className="text-gray-300">›</span>
+    </Link>
+  );
+
   return (
     <div className="min-h-screen bg-gray-50 text-black">
       <Header />
@@ -99,77 +134,75 @@ export default function MyPage() {
             )}
           </div>
           <h2 className="text-xl font-bold mb-1">{user.displayName || "ユーザー"}</h2>
-          
-          {/* ★ 追加：都道府県表示 */}
           <div className="flex items-center gap-1 text-gray-400 text-xs mb-3 font-bold">
             <span className="text-red-500">📍</span>
             <span>{profile?.prefecture || "活動エリア未設定"}</span>
           </div>
-
-          {/* ★ 追加：自己紹介表示 */}
-          {profile?.bio && (
-            <p className="text-xs text-gray-600 text-center leading-relaxed mb-6 px-4 italic">
-              {profile.bio}
-            </p>
-          )}
+          {profile?.bio && <p className="text-xs text-gray-600 text-center leading-relaxed mb-6 px-4 italic">{profile.bio}</p>}
           
           <div className="flex gap-2 w-full max-w-xs">
-            <Link href="/profile" className="flex-1 bg-gray-900 text-white text-center py-3 rounded-2xl text-xs font-bold active:scale-95 transition">
-              プロフィール編集
-            </Link>
-            <button onClick={handleLogout} className="flex-1 border border-gray-200 text-gray-400 py-3 rounded-2xl text-xs font-bold active:scale-95 transition">
-              ログアウト
-            </button>
+            <Link href="/profile" className="flex-1 bg-gray-900 text-white text-center py-3 rounded-2xl text-xs font-bold active:scale-95 transition">プロフィール編集</Link>
+            <button onClick={handleLogout} className="flex-1 border border-gray-200 text-gray-400 py-3 rounded-2xl text-xs font-bold active:scale-95 transition">ログアウト</button>
           </div>
         </div>
-
-        {/* サポートボタン */}
-        <Link 
-          href="/contact" 
-          className="flex justify-between items-center p-5 bg-white rounded-2xl text-sm font-bold shadow-sm border border-red-50 mb-6 hover:bg-red-50 transition active:scale-95"
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-xl">💡</span>
-            <span className="text-gray-700 font-bold tracking-tighter">運営への要望・不具合報告</span>
-          </div>
-          <span className="text-red-400">›</span>
-        </Link>
 
         {/* タブ切り替えメニュー */}
         <div className="flex border-b border-gray-200 mb-6 bg-white rounded-t-2xl px-2">
           {[
             { id: "selling", label: "出品", count: sellingItems.length },
+            { id: "chat", label: "取引中", count: chats.filter(c => c.status !== "closed").length }, // ★追加
             { id: "purchased", label: "取引済", count: purchasedItems.length },
             { id: "liked", label: "いいね", count: likedItems.length }
           ].map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 py-4 text-xs font-bold transition-all relative ${
+              className={`flex-1 py-4 text-[10px] sm:text-xs font-bold transition-all relative ${
                 activeTab === tab.id ? "text-red-600" : "text-gray-400"
               }`}
             >
-              {tab.label} <span className="ml-1 opacity-60">{tab.count}</span>
+              {tab.label} <span className="ml-0.5 opacity-60">{tab.count}</span>
               {activeTab === tab.id && <div className="absolute bottom-0 left-0 right-0 h-1 bg-red-600 rounded-t-full" />}
             </button>
           ))}
         </div>
 
-        {/* 商品一覧グリッド */}
-        <div className="grid grid-cols-2 gap-3">
-          {activeTab === "selling" && sellingItems.map(item => <ItemCard key={item.id} item={item} />)}
-          {activeTab === "purchased" && purchasedItems.map(item => <ItemCard key={item.id} item={item} />)}
-          {activeTab === "liked" && likedItems.map(item => <ItemCard key={item.id} item={item} />)}
-        </div>
+        {/* 表示エリア */}
+        <div>
+          {activeTab === "selling" && (
+            <div className="grid grid-cols-2 gap-3">
+              {sellingItems.map(item => <ItemCard key={item.id} item={item} />)}
+            </div>
+          )}
 
-        {/* 空の状態の表示 */}
-        {((activeTab === "selling" && sellingItems.length === 0) ||
-          (activeTab === "purchased" && purchasedItems.length === 0) ||
-          (activeTab === "liked" && likedItems.length === 0)) && (
-          <div className="py-20 text-center text-gray-400 text-sm bg-white rounded-b-3xl border border-dashed border-gray-200">
-            表示する商品がありません
-          </div>
-        )}
+          {activeTab === "chat" && (
+            <div className="flex flex-col">
+              {chats.map(chat => <ChatCard key={chat.id} chat={chat} />)}
+            </div>
+          )}
+
+          {activeTab === "purchased" && (
+            <div className="grid grid-cols-2 gap-3">
+              {purchasedItems.map(item => <ItemCard key={item.id} item={item} />)}
+            </div>
+          )}
+
+          {activeTab === "liked" && (
+            <div className="grid grid-cols-2 gap-3">
+              {likedItems.map(item => <ItemCard key={item.id} item={item} />)}
+            </div>
+          )}
+
+          {/* 空の状態 */}
+          {((activeTab === "selling" && sellingItems.length === 0) ||
+            (activeTab === "chat" && chats.length === 0) ||
+            (activeTab === "purchased" && purchasedItems.length === 0) ||
+            (activeTab === "liked" && likedItems.length === 0)) && (
+            <div className="py-20 text-center text-gray-400 text-sm bg-white rounded-b-3xl border border-dashed border-gray-200 font-bold">
+              表示する項目がありません
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
