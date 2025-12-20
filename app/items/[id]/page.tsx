@@ -14,7 +14,7 @@ export default function ItemDetail() {
   const router = useRouter();
   const [item, setItem] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
-  const [seller, setSeller] = useState<any>(null); // ★ 出品者の詳細（県・自己紹介）用
+  const [seller, setSeller] = useState<any>(null); // 出品者の詳細情報用
   const [isLiked, setIsLiked] = useState(false);
   const [comments, setComments] = useState<any[]>([]); 
   const [newComment, setNewComment] = useState("");   
@@ -23,13 +23,16 @@ export default function ItemDetail() {
     // 1. 商品情報のリアルタイム取得
     const unsubItem = onSnapshot(doc(db, "items", id as string), async (s) => {
       if (s.exists()) {
-        const itemData = { id: s.id, ...s.data() };
+        // 型エラー回避のため as any を付与
+        const itemData = { id: s.id, ...s.data() } as any;
         setItem(itemData);
 
-        // ★ 出品者の詳細情報をFirestoreから1回だけ取得（県・自己紹介）
-        const sellerSnap = await getDoc(doc(db, "users", itemData.sellerId));
-        if (sellerSnap.exists()) {
-          setSeller(sellerSnap.data());
+        // 出品者の詳細（県・自己紹介）をFirestoreから取得
+        if (itemData.sellerId) {
+          const sellerSnap = await getDoc(doc(db, "users", itemData.sellerId));
+          if (sellerSnap.exists()) {
+            setSeller(sellerSnap.data());
+          }
         }
       }
     });
@@ -43,7 +46,7 @@ export default function ItemDetail() {
       setComments(s.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
-    // 3. ログイン状態と「いいね」の監視
+    // 3. 認証状態の監視
     const unsubAuth = auth.onAuthStateChanged((u) => {
       setUser(u);
       if (u) {
@@ -89,6 +92,7 @@ export default function ItemDetail() {
         }
       }
     } catch (e) {
+      console.error("Comment failed:", e);
       alert("送信に失敗しました。");
       setNewComment(commentText); 
     }
@@ -144,13 +148,11 @@ export default function ItemDetail() {
 
         {/* 商品情報 */}
         <div className="p-6 border-b">
-          <div className="flex justify-between items-start mb-2">
-            <h1 className="text-2xl font-bold flex-1">{item.name}</h1>
-          </div>
+          <h1 className="text-2xl font-bold mb-1">{item.name}</h1>
           
-          {/* 📍 出品者の県を表示 */}
-          <div className="flex items-center gap-1 text-gray-500 text-xs mb-4">
-            <span className="text-sm text-red-500">📍</span>
+          {/* 📍 出品者の活動エリアを表示 */}
+          <div className="flex items-center gap-1 text-gray-500 text-xs mb-4 font-bold">
+            <span className="text-red-500 text-sm">📍</span>
             <span>取引場所: {seller?.prefecture || "未設定"}</span>
           </div>
 
@@ -177,23 +179,23 @@ export default function ItemDetail() {
             </Link>
           )}
 
-          {/* ★ 出品者プロフィールカード */}
-          <div className="mt-10 p-5 bg-gray-50 rounded-[2rem] border border-gray-100 shadow-inner">
+          {/* 出品者プロフィールカード */}
+          <div className="mt-10 p-5 bg-gray-50 rounded-[2rem] border border-gray-100 shadow-sm">
             <h3 className="text-[10px] font-bold text-gray-400 mb-4 tracking-widest uppercase">出品者プロフィール</h3>
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden">
                 {seller?.photoURL ? (
                   <img src={seller.photoURL} className="w-full h-full object-cover" />
                 ) : (
-                  <div className="text-center pt-2">👤</div>
+                  <div className="w-full h-full flex items-center justify-center text-gray-400">👤</div>
                 )}
               </div>
               <div>
-                <p className="text-sm font-bold">{seller?.displayName || "ユーザー"}</p>
-                <p className="text-[10px] text-gray-400">活動エリア: {seller?.prefecture || "未設定"}</p>
+                <p className="text-sm font-bold">{seller?.displayName || "匿名ユーザー"}</p>
+                <p className="text-[10px] text-gray-400 font-medium">📍 {seller?.prefecture || "未設定"}</p>
               </div>
             </div>
-            <p className="text-xs text-gray-600 leading-relaxed italic">
+            <p className="text-xs text-gray-600 leading-relaxed italic whitespace-pre-wrap">
               {seller?.bio || "自己紹介はまだありません。"}
             </p>
           </div>
@@ -229,9 +231,9 @@ export default function ItemDetail() {
                 value={newComment} 
                 onChange={(e) => setNewComment(e.target.value)}
                 placeholder="質問してみる..." 
-                className="flex-1 bg-white border border-gray-200 px-4 py-3 rounded-full text-sm outline-none focus:border-red-500 transition shadow-sm"
+                className="flex-1 bg-white border border-gray-200 px-4 py-3 rounded-full text-sm outline-none focus:border-red-500 transition"
               />
-              <button className="bg-gray-900 text-white px-5 py-3 rounded-full text-sm font-bold active:scale-90 transition">送信</button>
+              <button className="bg-gray-900 text-white px-5 py-3 rounded-full text-sm font-bold active:scale-90 transition shadow-md">送信</button>
             </form>
           )}
         </div>
