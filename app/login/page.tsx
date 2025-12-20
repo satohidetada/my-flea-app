@@ -1,75 +1,74 @@
 "use client";
+import { useState, useEffect } from "react";
 import { auth, db } from "@/lib/firebase/config";
-import { GoogleAuthProvider, signInWithRedirect, getRedirectResult, onAuthStateChanged } from "firebase/auth";
+import { 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword, 
+  onAuthStateChanged 
+} from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
 import Header from "@/components/Header";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [isRegister, setIsRegister] = useState(false); // ログインか登録かの切り替え
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [isLineBrowser, setIsLineBrowser] = useState(false);
-  const isProcessing = useRef(false); // 重複処理防止用
 
+  // 既にログインしている場合は自動的にトップページへ
   useEffect(() => {
-    // 1. LINE判定
-    const ua = navigator.userAgent.toLowerCase();
-    if (ua.indexOf("line") !== -1 || ua.indexOf("fban") !== -1 || ua.indexOf("fbav") !== -1 || ua.indexOf("instagram") !== -1) {
-      setIsLineBrowser(true);
-    }
-
-    // 2. ログイン状態の監視 (これがループ防止に最も効きます)
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user && !isProcessing.current) {
+      if (user) {
         router.push("/");
       }
     });
-
-    // 3. リダイレクト結果の処理
-    const checkRedirect = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result?.user && !isProcessing.current) {
-          isProcessing.current = true;
-          setLoading(true);
-          const user = result.user;
-          const userRef = doc(db, "users", user.uid);
-          const userSnap = await getDoc(userRef);
-
-          if (!userSnap.exists()) {
-            await setDoc(userRef, {
-              uid: user.uid,
-              displayName: user.displayName,
-              email: user.email,
-              photoURL: user.photoURL,
-              prefecture: "未設定",
-              createdAt: serverTimestamp(),
-            });
-          }
-          router.push("/");
-        }
-      } catch (error) {
-        console.error("Redirect Error:", error);
-        setLoading(false);
-      }
-    };
-
-    checkRedirect();
     return () => unsubscribe();
   }, [router]);
 
-  const handleGoogleLogin = async () => {
-    if (loading) return;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (password.length < 6) {
+      alert("パスワードは6文字以上で設定してください");
+      return;
+    }
     setLoading(true);
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-    
+
     try {
-      await signInWithRedirect(auth, provider);
+      if (isRegister) {
+        // --- 新規登録処理 ---
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        
+        // Firestoreにユーザー情報を登録
+        await setDoc(doc(db, "users", user.uid), {
+          uid: user.uid,
+          email: user.email,
+          displayName: email.split("@")[0], // メールの前半部分を仮の名前に
+          prefecture: "未設定",
+          photoURL: "",
+          createdAt: serverTimestamp(),
+        });
+        alert("アカウントを作成しました！");
+      } else {
+        // --- ログイン処理 ---
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+      router.push("/");
     } catch (error: any) {
       console.error(error);
-      alert("ログインエラー: " + error.message);
+      // エラーメッセージの日本語化
+      if (error.code === "auth/user-not-found" || error.code === "auth/wrong-password") {
+        alert("メールアドレスまたはパスワードが正しくありません。");
+      } else if (error.code === "auth/email-already-in-use") {
+        alert("このメールアドレスは既に登録されています。");
+      } else if (error.code === "auth/invalid-email") {
+        alert("メールアドレスの形式が正しくありません。");
+      } else {
+        alert("エラーが発生しました: " + error.message);
+      }
+    } finally {
       setLoading(false);
     }
   };
@@ -78,26 +77,50 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-50 text-black font-sans">
       <Header />
       <main className="flex flex-col items-center justify-center pt-20 px-4">
-        <div className="max-w-md w-full bg-white p-10 rounded-[2.5rem] shadow-xl border border-gray-100 text-center">
-          <h1 className="text-3xl font-black text-red-600 mb-2 tracking-tighter italic">NOMI</h1>
-          <p className="text-gray-400 text-[10px] font-bold mb-8 uppercase tracking-[0.2em]">Marketplace Login</p>
+        <div className="max-w-md w-full bg-white p-10 rounded-[2.5rem] shadow-xl border border-gray-100">
+          <h1 className="text-3xl font-black text-red-600 mb-2 text-center italic tracking-tighter">NOMI</h1>
+          <p className="text-gray-400 text-[10px] font-bold mb-8 text-center uppercase tracking-[0.2em]">
+            {isRegister ? "Create Account" : "Member Login"}
+          </p>
           
-          {isLineBrowser && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-100 rounded-2xl text-left">
-              <p className="text-[11px] font-black text-red-600 mb-1 flex items-center gap-1">⚠️ ブラウザを切り替えてください</p>
-              <p className="text-[10px] text-red-500 leading-relaxed font-bold">
-                LINE等のアプリ内では制限されています。右上の「︙」から<span className="underline">「デフォルトのブラウザで開く」</span>を選択してください。
-              </p>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 ml-2 mb-1 block">EMAIL</label>
+              <input
+                type="email"
+                placeholder="example@mail.com"
+                className="w-full p-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-red-500/20 text-sm font-medium border border-transparent focus:border-red-100"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
             </div>
-          )}
+            <div>
+              <label className="text-[10px] font-bold text-gray-400 ml-2 mb-1 block">PASSWORD</label>
+              <input
+                type="password"
+                placeholder="6文字以上"
+                className="w-full p-4 bg-gray-50 rounded-2xl outline-none focus:ring-2 focus:ring-red-500/20 text-sm font-medium border border-transparent focus:border-red-100"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            
+            <button
+              type="submit"
+              disabled={loading}
+              className={`w-full bg-red-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-red-200 transition active:scale-95 mt-4 ${loading ? "opacity-50 cursor-not-allowed" : "hover:bg-red-700"}`}
+            >
+              {loading ? "処理中..." : (isRegister ? "登録して始める" : "ログイン")}
+            </button>
+          </form>
 
           <button
-            onClick={handleGoogleLogin}
-            disabled={loading}
-            className={`w-full flex items-center justify-center gap-3 bg-white border-2 border-gray-100 py-4 rounded-2xl font-bold transition active:scale-95 shadow-sm ${loading ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"}`}
+            onClick={() => setIsRegister(!isRegister)}
+            className="w-full mt-6 text-xs text-gray-500 font-bold hover:text-red-600 transition text-center"
           >
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-            {loading ? "認証中..." : "Googleでログイン"}
+            {isRegister ? "すでにアカウントをお持ちの方はこちら" : "新しくアカウントを作成する"}
           </button>
         </div>
       </main>
