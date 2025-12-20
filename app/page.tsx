@@ -20,7 +20,7 @@ export default function Home() {
   const [filteredItems, setFilteredItems] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPrefs, setSelectedPrefs] = useState<string[]>([]);
-  const [showOnlyLikes, setShowOnlyLikes] = useState(false); // ★ いいね絞り込み状態
+  const [showOnlyLikes, setShowOnlyLikes] = useState(false);
   const [sortBy, setSortBy] = useState("newest");
   const [user, setUser] = useState<any>(null);
   const [userLikes, setUserLikes] = useState<string[]>([]);
@@ -40,7 +40,7 @@ export default function Home() {
         return () => unsubLikes();
       } else {
         setUserLikes([]);
-        setShowOnlyLikes(false); // ログアウトしたら解除
+        setShowOnlyLikes(false);
       }
     });
     return () => { unsubItems(); unsubAuth(); };
@@ -49,7 +49,6 @@ export default function Home() {
   useEffect(() => {
     let result = [...items];
 
-    // 1. キーワード検索
     if (searchQuery) {
       result = result.filter(item => 
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -57,17 +56,14 @@ export default function Home() {
       );
     }
 
-    // 2. 都道府県フィルター
     if (selectedPrefs.length > 0) {
       result = result.filter(item => selectedPrefs.includes(item.sellerPrefecture));
     }
 
-    // 3. ★ いいね絞り込み
     if (showOnlyLikes) {
       result = result.filter(item => userLikes.includes(item.id));
     }
 
-    // 4. 並び替え
     result.sort((a, b) => {
       if (sortBy === "newest") return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
       if (sortBy === "price_asc") return a.price - b.price;
@@ -132,7 +128,6 @@ export default function Home() {
 
           <div className="flex items-center gap-2 overflow-hidden">
             <div className="flex gap-2 overflow-x-auto no-scrollbar py-1 shrink-0 max-w-full">
-              {/* ★ いいね済みフィルターボタン */}
               {user && (
                 <button 
                   onClick={() => setShowOnlyLikes(!showOnlyLikes)}
@@ -181,7 +176,14 @@ export default function Home() {
             <div key={item.id} className="relative group">
               <Link href={`/items/${item.id}`} className="bg-white rounded-xl overflow-hidden shadow-sm border border-gray-100 block h-full active:scale-[0.98] transition">
                 <div className="aspect-square bg-gray-50 relative">
-                  <img src={item.imageUrl} className="w-full h-full object-cover" alt={item.name} loading="lazy" />
+                  {/* ★ Googleドライブの画像表示をスマホで許可するための設定を追加 */}
+                  <img 
+                    src={item.imageUrl} 
+                    className="w-full h-full object-cover" 
+                    alt={item.name} 
+                    loading="lazy" 
+                    referrerPolicy="no-referrer"
+                  />
                   {item.isSold && (
                     <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                       <span className="bg-red-600 text-white text-[10px] font-black px-3 py-1 rounded-sm rotate-[-10deg] shadow-lg">SOLD OUT</span>

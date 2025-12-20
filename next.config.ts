@@ -1,9 +1,10 @@
+// next.config.ts
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // これを追加：URL末尾のスラッシュを厳格に管理して404を防ぐ
   trailingSlash: false,
   images: {
+    unoptimized: true, // ★これを追加：画像の最適化を無効化して直接表示
     remotePatterns: [
       {
         protocol: 'https',
