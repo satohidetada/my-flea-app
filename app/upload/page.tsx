@@ -11,6 +11,7 @@ export default function UploadPage() {
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
   const [image, setImage] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null); // ★ プレビュー用URL
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -28,6 +29,16 @@ export default function UploadPage() {
     });
     return () => unsubscribe();
   }, [router]);
+
+  // ★ 画像が選択された時にプレビューURLを作成する関数
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setImage(file);
+      const url = URL.createObjectURL(file); // ブラウザ一時URL作成
+      setPreviewUrl(url);
+    }
+  };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,24 +97,40 @@ export default function UploadPage() {
       <Header />
       <main className="p-4 flex flex-col items-center">
         <div className="max-w-md w-full bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-          <h1 className="text-xl font-bold mb-6 text-red-600">📸 NOMIに出品する</h1>
+          <h1 className="text-xl font-bold mb-6 text-red-600 font-sans">📸 NOMIに出品する</h1>
           
           <form onSubmit={handleUpload} className="space-y-6">
+            {/* 画像選択 & プレビューエリア */}
             <div>
               <label className="block text-xs font-bold text-gray-400 mb-2 uppercase">商品画像</label>
-              <input 
-                type="file" accept="image/*" 
-                onChange={(e) => setImage(e.target.files?.[0] || null)} 
-                className="w-full text-sm border-2 border-dashed p-4 rounded-2xl bg-gray-50 border-gray-200" 
-                required 
-              />
+              <div className="relative w-full aspect-square rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center group">
+                {previewUrl ? (
+                  <>
+                    <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                      <p className="text-white text-xs font-bold">画像をタップして変更</p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center">
+                    <span className="text-4xl">📷</span>
+                    <p className="text-[10px] text-gray-400 mt-2 font-bold">画像をアップロード</p>
+                  </div>
+                )}
+                <input 
+                  type="file" accept="image/*" 
+                  onChange={handleImageChange} 
+                  className="absolute inset-0 opacity-0 cursor-pointer" 
+                  required={!previewUrl}
+                />
+              </div>
             </div>
 
             <div>
               <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">商品名</label>
               <input 
                 type="text" value={name} onChange={(e) => setName(e.target.value)} 
-                className="w-full border-b-2 py-2 outline-none focus:border-red-500 transition text-lg" 
+                className="w-full border-b-2 py-2 outline-none focus:border-red-500 transition text-lg font-medium" 
                 placeholder="例: ハンドメイドのアクセサリー" required 
               />
             </div>
@@ -112,18 +139,17 @@ export default function UploadPage() {
               <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">価格 (円)</label>
               <input 
                 type="number" value={price} onChange={(e) => setPrice(e.target.value)} 
-                className="w-full border-b-2 py-2 outline-none focus:border-red-500 transition text-lg" 
+                className="w-full border-b-2 py-2 outline-none focus:border-red-500 transition text-lg font-medium" 
                 placeholder="3000" required 
               />
             </div>
 
-            {/* ★ ここが追加されていることを確認してください！ */}
             <div>
               <label className="block text-xs font-bold text-gray-400 mb-1 uppercase">商品の詳細説明</label>
               <textarea 
                 value={description} onChange={(e) => setDescription(e.target.value)} 
                 className="w-full border-2 rounded-2xl p-4 text-sm h-40 outline-none focus:border-red-500 bg-gray-50 transition border-gray-100" 
-                placeholder="商品の状態、色、サイズ、発送方法などを詳しく書いてください" required 
+                placeholder="商品の状態、色、サイズ、発送方法など..." required 
               />
             </div>
 
