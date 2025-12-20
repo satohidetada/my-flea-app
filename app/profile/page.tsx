@@ -1,8 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
-import { auth, db } from "@/lib/firebase/config"; // db を追加
+import { auth, db } from "@/lib/firebase/config";
 import { updateProfile, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore"; // Firestore用
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 
@@ -22,9 +22,10 @@ const SECRET_API_KEY = "my-secret-token-777";
 export default function ProfileEdit() {
   const [name, setName] = useState("");
   const [photoURL, setPhotoURL] = useState("");
-  const [prefecture, setPrefecture] = useState("東京都"); // ★追加
-  const [bio, setBio] = useState(""); // ★追加
+  const [prefecture, setPrefecture] = useState("東京都");
+  const [bio, setBio] = useState("");
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -33,22 +34,48 @@ export default function ProfileEdit() {
         setName(user.displayName || "");
         setPhotoURL(user.photoURL || "");
         
-        // Firestoreから追加情報を取得
         const docRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           setPrefecture(docSnap.data().prefecture || "東京都");
           setBio(docSnap.data().bio || "");
+          // Firestore側に写真があればそれを優先
+          if (docSnap.data().photoURL) setPhotoURL(docSnap.data().photoURL);
         }
       } else {
-        router.push("/");
+        router.push("/login");
       }
     });
     return () => unsubscribe();
   }, [router]);
 
-  // 画像アップロード処理はそのまま（省略せずに維持してください）
-  const uploadImage = async (file: File) => { /* ...既存のuploadImage処理... */ };
+  // 画像アップロード処理
+  const uploadImage = async (file: File) => {
+    setUploading(true);
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = async () => {
+      const base64Data = reader.result?.toString().split(",")[1];
+      try {
+        const res = await fetch(GAS_URL, {
+          method: "POST",
+          body: JSON.stringify({
+            img: base64Data,
+            type: file.type,
+            key: SECRET_API_KEY,
+          }),
+        });
+        const data = await res.json();
+        if (data.url) {
+          setPhotoURL(data.url); // ★ここで画面上のURLを更新！
+        }
+      } catch (e) {
+        alert("画像アップロードに失敗しました");
+      } finally {
+        setUploading(false);
+      }
+    };
+  };
 
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,10 +84,8 @@ export default function ProfileEdit() {
     setLoading(true);
 
     try {
-      // 1. Authの更新
       await updateProfile(user, { displayName: name, photoURL: photoURL });
 
-      // 2. Firestoreの更新（ここが重要）
       await setDoc(doc(db, "users", user.uid), {
         displayName: name,
         photoURL: photoURL,
@@ -84,24 +109,38 @@ export default function ProfileEdit() {
       <main className="p-6 max-w-md mx-auto">
         <h1 className="text-xl font-bold mb-6 tracking-tighter">プロフィール編集</h1>
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-8">
-          {/* 写真変更部分はそのまま */}
+          
           <div className="flex flex-col items-center gap-4">
-            <div className="w-24 h-24 rounded-full overflow-hidden bg-gray-100 border-4 border-white shadow-sm">
-              {photoURL ? <img src={photoURL} className="w-full h-full object-cover" /> : <div className="text-4xl mt-6 text-center">👤</div>}
+            <div className="relative w-24 h-24 rounded-full overflow-hidden bg-gray-100 border-4 border-white shadow-sm">
+              {photoURL ? (
+                <img src={photoURL} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-4xl text-gray-300">👤</div>
+              )}
+              {uploading && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-[10px] text-white font-bold">
+                  UP中...
+                </div>
+              )}
             </div>
-            <label className="text-xs font-bold text-red-600 bg-red-50 px-4 py-2 rounded-full cursor-pointer">
-              写真を変更
-              <input type="file" className="hidden" accept="image/*" onChange={(e) => e.target.files?.[0] && uploadImage(e.target.files[0])} />
+            <label className="text-xs font-bold text-red-600 bg-red-50 px-4 py-2 rounded-full cursor-pointer hover:bg-red-100 transition">
+              {uploading ? "アップロード中..." : "写真を変更"}
+              <input 
+                type="file" 
+                className="hidden" 
+                accept="image/*" 
+                disabled={uploading}
+                onChange={(e) => e.target.files?.[0] && uploadImage(e.target.files[0])} 
+              />
             </label>
           </div>
 
           <form onSubmit={handleUpdate} className="space-y-6">
             <div>
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">ニックネーム</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full border-b py-2 focus:border-red-500 outline-none text-lg" required />
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full border-b py-2 focus:border-red-500 outline-none text-lg bg-transparent" required />
             </div>
 
-            {/* ★ 都道府県セレクトボックス */}
             <div>
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">主な活動エリア</label>
               <select 
@@ -113,18 +152,17 @@ export default function ProfileEdit() {
               </select>
             </div>
 
-            {/* ★ 自己紹介テキストエリア */}
             <div>
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">自己紹介</label>
               <textarea 
                 value={bio} 
                 onChange={(e) => setBio(e.target.value)}
-                placeholder="直接手渡し希望です！土日に動けます。"
+                placeholder="直接手渡し希望です！"
                 className="w-full border rounded-2xl p-4 mt-2 h-32 text-sm bg-gray-50 outline-none focus:border-red-500 transition resize-none"
               />
             </div>
             
-            <button type="submit" disabled={loading} className="w-full bg-black text-white font-bold py-4 rounded-2xl shadow-xl active:scale-95 transition disabled:bg-gray-300">
+            <button type="submit" disabled={loading || uploading} className="w-full bg-black text-white font-bold py-4 rounded-2xl shadow-xl active:scale-95 transition disabled:bg-gray-300">
               {loading ? "保存中..." : "変更を確定する"}
             </button>
           </form>

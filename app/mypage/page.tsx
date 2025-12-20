@@ -23,35 +23,45 @@ export default function MyPage() {
       if (u) {
         setUser(u);
         
-        // 1. プロフィール情報取得 (ここを最優先にする)
-        const profileSnap = await getDoc(doc(db, "users", u.uid));
-        if (profileSnap.exists()) {
-          setProfile(profileSnap.data());
-        }
+        // 1. プロフィール情報取得 (ここを最速で終わらせる)
+        try {
+          const profileSnap = await getDoc(doc(db, "users", u.uid));
+          if (profileSnap.exists()) {
+            setProfile(profileSnap.data());
+          }
+        } catch (e) { console.error("Profile fetch error:", e); }
 
+        // 各種データの取得（1つがエラーになっても他を表示できるようにtry-catchを分ける）
+        
         // 2. 出品した商品
-        const qSelling = query(collection(db, "items"), where("sellerId", "==", u.uid), orderBy("createdAt", "desc"));
-        const snapSelling = await getDocs(qSelling);
-        setSellingItems(snapSelling.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        try {
+          const qSelling = query(collection(db, "items"), where("sellerId", "==", u.uid), orderBy("createdAt", "desc"));
+          const snapSelling = await getDocs(qSelling);
+          setSellingItems(snapSelling.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        } catch (e) { console.error("Selling items error (Index might be missing):", e); }
 
         // 3. 購入済の商品
-        const qPurchased = query(collection(db, "items"), where("buyerId", "==", u.uid), orderBy("soldAt", "desc"));
-        const snapPurchased = await getDocs(qPurchased);
-        setPurchasedItems(snapPurchased.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        try {
+          const qPurchased = query(collection(db, "items"), where("buyerId", "==", u.uid), orderBy("soldAt", "desc"));
+          const snapPurchased = await getDocs(qPurchased);
+          setPurchasedItems(snapPurchased.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        } catch (e) { console.error("Purchased items error:", e); }
 
         // 4. いいねした商品
-        const qLikes = query(collection(db, "users", u.uid, "likes"));
-        const snapLikes = await getDocs(qLikes);
-        const likedItemIds = snapLikes.docs.map(d => d.id);
-        if (likedItemIds.length > 0) {
-          const itemsData = await Promise.all(
-            likedItemIds.map(async (id) => {
-              const d = await getDoc(doc(db, "items", id));
-              return d.exists() ? { id: d.id, ...d.data() } : null;
-            })
-          );
-          setLikedItems(itemsData.filter(i => i !== null));
-        }
+        try {
+          const qLikes = query(collection(db, "users", u.uid, "likes"));
+          const snapLikes = await getDocs(qLikes);
+          const likedItemIds = snapLikes.docs.map(d => d.id);
+          if (likedItemIds.length > 0) {
+            const itemsData = await Promise.all(
+              likedItemIds.map(async (id) => {
+                const d = await getDoc(doc(db, "items", id));
+                return d.exists() ? { id: d.id, ...d.data() } : null;
+              })
+            );
+            setLikedItems(itemsData.filter(i => i !== null));
+          }
+        } catch (e) { console.error("Likes error:", e); }
 
         // 5. 取引チャット一覧
         try {
@@ -62,9 +72,7 @@ export default function MyPage() {
           );
           const snapChats = await getDocs(qChats);
           setChats(snapChats.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        } catch (e) {
-          console.error("Chat fetch error:", e);
-        }
+        } catch (e) { console.error("Chat error:", e); }
 
         setLoading(false);
       } else {
@@ -125,28 +133,27 @@ export default function MyPage() {
         
         {/* プロフィールセクション */}
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 flex flex-col items-center mb-6">
-          <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white mb-4 bg-gray-100 shadow-md">
-            {/* 修正点: Firestoreから取得した profile.photoURL を最優先で表示する */}
+          <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-white mb-4 bg-gray-100 shadow-md flex items-center justify-center">
+            {/* 修正点: profile.photoURL を最優先にし、キャッシュを考慮 */}
             {(profile?.photoURL || user?.photoURL) ? (
               <img 
                 src={profile?.photoURL || user?.photoURL} 
                 className="w-full h-full object-cover" 
-                alt="Profile" 
-                // キャッシュ回避のために読み込み失敗時に少し工夫する設定も可能
+                alt="Profile"
+                key={profile?.photoURL} // URLが変わった時に再レンダリングを強制
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-300 text-4xl">👤</div>
+              <div className="text-gray-300 text-4xl">👤</div>
             )}
           </div>
           
-          {/* 修正点: 表示名も Firestore のデータを優先 */}
           <h2 className="text-xl font-bold mb-1">{profile?.displayName || user?.displayName || "ユーザー"}</h2>
           
           <div className="flex items-center gap-1 text-gray-400 text-xs mb-3 font-bold">
             <span className="text-red-500">📍</span>
             <span>{profile?.prefecture || "活動エリア未設定"}</span>
           </div>
-          {profile?.bio && <p className="text-xs text-gray-600 text-center leading-relaxed mb-6 px-4 italic">{profile.bio}</p>}
+          {profile?.bio && <p className="text-xs text-gray-600 text-center leading-relaxed mb-6 px-4 italic whitespace-pre-wrap">{profile.bio}</p>}
           
           <div className="flex gap-2 w-full max-w-xs">
             <Link href="/profile" className="flex-1 bg-gray-900 text-white text-center py-3 rounded-2xl text-xs font-bold active:scale-95 transition">プロフィール編集</Link>
@@ -201,7 +208,7 @@ export default function MyPage() {
             </div>
           )}
 
-          {/* 空の状態 */}
+          {/* 空の状態の表示ロジック修正 */}
           {((activeTab === "selling" && sellingItems.length === 0) ||
             (activeTab === "chat" && chats.length === 0) ||
             (activeTab === "purchased" && purchasedItems.length === 0) ||
