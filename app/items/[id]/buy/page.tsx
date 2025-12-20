@@ -20,6 +20,10 @@ export default function BuyConfirm() {
     const currentUser = auth.currentUser;
     if (!currentUser || !item) return;
 
+    // ★ ここで確認ダイアログを表示
+    const ok = window.confirm(`「${item.name}」を購入しますか？\n※この操作は取り消せません。`);
+    if (!ok) return;
+
     setLoading(true);
     try {
       // 1. 商品を売り切れにする
@@ -39,9 +43,9 @@ export default function BuyConfirm() {
         updatedAt: serverTimestamp(),
       }, { merge: true });
 
-      // ★ 3. 重要：通知データを作成する
+      // 3. 通知データを作成
       await addDoc(collection(db, "notifications"), {
-        userId: item.sellerId, // 出品者のID
+        userId: item.sellerId,
         title: "商品が売れました！",
         body: `「${item.name}」が購入されました。`,
         link: `/chat/${id}`,
@@ -49,8 +53,8 @@ export default function BuyConfirm() {
         createdAt: serverTimestamp(),
       });
 
-      alert("購入が完了しました！通知を確認してください。");
-      router.push("/"); // ベルを確認するためにトップへ
+      alert("購入が完了しました！");
+      router.push(`/chat/${id}`); // 購入後はそのままチャットへ飛ばすのがスムーズです
 
     } catch (error: any) {
       alert("エラー: " + error.message);
@@ -62,22 +66,36 @@ export default function BuyConfirm() {
   if (!item) return <div className="p-10 text-center text-black">読み込み中...</div>;
 
   return (
-    <main className="min-h-screen bg-gray-50 text-black p-4 flex items-center justify-center">
+    <main className="min-h-screen bg-gray-50 text-black p-4 flex flex-col items-center justify-center">
       <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl border">
-        <h1 className="text-xl font-bold mb-6 text-center">購入の最終確認</h1>
-        <div className="flex gap-4 mb-8 p-4 bg-gray-50 rounded-2xl">
-          <img src={item.imageUrl} className="w-16 h-16 object-cover rounded-xl" />
-          <div>
-            <p className="font-bold text-sm">{item.name}</p>
-            <p className="text-red-600 font-bold">¥{item.price?.toLocaleString()}</p>
+        <h1 className="text-xl font-bold mb-6 text-center text-red-600">購入内容の最終確認</h1>
+        
+        <div className="flex gap-4 mb-8 p-4 bg-gray-50 rounded-2xl border border-gray-100">
+          <img src={item.imageUrl} className="w-20 h-20 object-cover rounded-xl shadow-sm" alt="" />
+          <div className="flex flex-col justify-center">
+            <p className="font-bold text-sm text-gray-700">{item.name}</p>
+            <p className="text-red-600 font-extrabold text-xl">¥{item.price?.toLocaleString()}</p>
           </div>
         </div>
+
+        <div className="bg-yellow-50 p-4 rounded-xl mb-8 text-xs text-yellow-700 leading-relaxed">
+          <p>⚠️ <b>ご注意：</b></p>
+          <p>購入後のキャンセルは出品者との合意が必要です。内容をよくご確認の上、手続きを完了してください。</p>
+        </div>
+
         <button 
           onClick={handleBuy}
-          disabled={loading}
-          className="w-full bg-red-600 text-white font-bold py-4 rounded-2xl shadow-lg disabled:bg-gray-300"
+          disabled={loading || item.isSold}
+          className="w-full bg-red-600 text-white font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition disabled:bg-gray-300"
         >
-          {loading ? "処理中..." : "購入を確定する"}
+          {loading ? "決済処理中..." : "購入を確定する"}
+        </button>
+
+        <button 
+          onClick={() => router.back()}
+          className="w-full mt-4 text-gray-400 text-sm font-bold py-2 hover:text-gray-600"
+        >
+          前の画面に戻る
         </button>
       </div>
     </main>
