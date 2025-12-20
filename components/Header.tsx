@@ -13,14 +13,15 @@ export default function Header() {
     const unsubAuth = onAuthStateChanged(auth, (u) => {
       setUser(u);
       if (u) {
-        // 未読(isRead == false)の通知をリアルタイム監視
+        // userIdのみでフィルタリング（これならインデックス不要）
         const q = query(
           collection(db, "notifications"),
-          where("userId", "==", u.uid),
-          where("isRead", "==", false)
+          where("userId", "==", u.uid)
         );
         const unsubNoti = onSnapshot(q, (snapshot) => {
-          setUnreadCount(snapshot.size);
+          // プログラム側で未読をカウントする
+          const unreads = snapshot.docs.filter(doc => doc.data().isRead === false);
+          setUnreadCount(unreads.length);
         });
         return () => unsubNoti();
       }
@@ -37,8 +38,8 @@ export default function Header() {
           <Link href="/mypage" className="relative p-1">
             <span className="text-2xl">🔔</span>
             {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm">
-                {unreadCount > 9 ? "9+" : unreadCount}
+              <span className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white">
+                {unreadCount}
               </span>
             )}
           </Link>
