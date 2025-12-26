@@ -9,6 +9,7 @@ import {
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
+import Link from "next/link"; // Linkを追加
 
 export default function LoginPage() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function LoginPage() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
         
-        // Firestoreにユーザー情報を登録
+        // Firestoreにユーザー情報を登録 (既存データ + 同意ログ)
         await setDoc(doc(db, "users", user.uid), {
           uid: user.uid,
           email: user.email,
@@ -49,6 +50,9 @@ export default function LoginPage() {
           prefecture: "未設定",
           photoURL: "",
           createdAt: serverTimestamp(),
+          // 同意情報の記録を追加
+          termsAgreed: true,
+          termsAgreedAt: serverTimestamp(),
         });
         alert("アカウントを作成しました！");
       } else {
@@ -59,7 +63,7 @@ export default function LoginPage() {
     } catch (error: any) {
       console.error(error);
       // エラーメッセージの日本語化
-      if (error.code === "auth/user-not-found" || error.code === "auth/wrong-password") {
+      if (error.code === "auth/user-not-found" || error.code === "auth/wrong-password" || error.code === "auth/invalid-credential") {
         alert("メールアドレスまたはパスワードが正しくありません。");
       } else if (error.code === "auth/email-already-in-use") {
         alert("このメールアドレスは既に登録されています。");
@@ -106,13 +110,22 @@ export default function LoginPage() {
                 required
               />
             </div>
+
+            {/* 同意文言の追加 */}
+            <div className="px-2 pt-2 text-center text-[10px] leading-relaxed text-gray-400 font-bold">
+              {isRegister ? "登録" : "ログイン"}ボタンを押すことで、当アプリの<br />
+              <Link href="/terms" className="text-red-500 underline underline-offset-2">利用規約</Link>
+              <span> および </span>
+              <Link href="/privacy" className="text-red-500 underline underline-offset-2">プライバシーポリシー</Link>
+              <br />に同意したものとみなされます。
+            </div>
             
             <button
               type="submit"
               disabled={loading}
-              className={`w-full bg-red-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-red-200 transition active:scale-95 mt-4 ${loading ? "opacity-50 cursor-not-allowed" : "hover:bg-red-700"}`}
+              className={`w-full bg-red-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-red-200 transition active:scale-95 mt-2 ${loading ? "opacity-50 cursor-not-allowed" : "hover:bg-red-700"}`}
             >
-              {loading ? "処理中..." : (isRegister ? "登録して始める" : "ログイン")}
+              {loading ? "処理中..." : (isRegister ? "同意して登録して始める" : "同意してログイン")}
             </button>
           </form>
 
