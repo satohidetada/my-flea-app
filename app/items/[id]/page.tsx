@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react"; // useRefを追加
 import { useParams, useRouter } from "next/navigation";
 import { db, auth } from "@/lib/firebase/config";
 import { 
@@ -14,20 +14,20 @@ export default function ItemDetail() {
   const router = useRouter();
   const [item, setItem] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
-  const [seller, setSeller] = useState<any>(null); // 出品者の詳細情報用
+  const [seller, setSeller] = useState<any>(null);
   const [isLiked, setIsLiked] = useState(false);
   const [comments, setComments] = useState<any[]>([]); 
   const [newComment, setNewComment] = useState("");   
+  
+  // スクロールを制御するための変数
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // 1. 商品情報のリアルタイム取得
     const unsubItem = onSnapshot(doc(db, "items", id as string), async (s) => {
       if (s.exists()) {
-        // 型エラー回避のため as any を付与
         const itemData = { id: s.id, ...s.data() } as any;
         setItem(itemData);
 
-        // 出品者の詳細（県・自己紹介）をFirestoreから取得
         if (itemData.sellerId) {
           const sellerSnap = await getDoc(doc(db, "users", itemData.sellerId));
           if (sellerSnap.exists()) {
@@ -37,7 +37,6 @@ export default function ItemDetail() {
       }
     });
 
-    // 2. コメント一覧のリアルタイム取得
     const qComments = query(
       collection(db, "items", id as string, "comments"),
       orderBy("createdAt", "asc")
@@ -46,7 +45,6 @@ export default function ItemDetail() {
       setComments(s.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
-    // 3. 認証状態の監視
     const unsubAuth = auth.onAuthStateChanged((u) => {
       setUser(u);
       if (u) {
@@ -60,14 +58,21 @@ export default function ItemDetail() {
     return () => { unsubItem(); unsubComments(); unsubAuth(); };
   }, [id]);
 
+  // 矢印ボタンを押した時のスクロール処理
+  const scroll = (direction: "left" | "right") => {
+    if (scrollRef.current) {
+      const { scrollLeft, clientWidth } = scrollRef.current;
+      const scrollTo = direction === "left" ? scrollLeft - clientWidth : scrollLeft + clientWidth;
+      scrollRef.current.scrollTo({ left: scrollTo, behavior: "smooth" });
+    }
+  };
+
   const handleSendComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return alert("コメントするにはログインが必要です");
     if (!newComment.trim()) return;
-
     const commentText = newComment;
     setNewComment(""); 
-
     try {
       await addDoc(collection(db, "items", id as string, "comments"), {
         text: commentText,
@@ -76,20 +81,15 @@ export default function ItemDetail() {
         senderPhoto: user.photoURL || "",
         createdAt: serverTimestamp(),
       });
-
       if (user.uid !== item.sellerId) {
-        try {
-          await addDoc(collection(db, "users", item.sellerId, "notifications"), {
-            type: "comment",
-            title: "商品にコメントが届きました",
-            body: `${user.displayName || "誰か"}さんが「${item.name}」にコメントしました。`,
-            link: `/items/${id}`,
-            isRead: false,
-            createdAt: serverTimestamp(),
-          });
-        } catch (notifError) {
-          console.error("Notification failed:", notifError);
-        }
+        await addDoc(collection(db, "users", item.sellerId, "notifications"), {
+          type: "comment",
+          title: "商品にコメントが届きました",
+          body: `${user.displayName || "誰か"}さんが「${item.name}」にコメントしました。`,
+          link: `/items/${id}`,
+          isRead: false,
+          createdAt: serverTimestamp(),
+        });
       }
     } catch (e) {
       console.error("Comment failed:", e);
@@ -124,35 +124,66 @@ export default function ItemDetail() {
 
   if (!item) return <div className="p-10 text-center text-black font-bold">読み込み中...</div>;
   const isSeller = user?.uid === item.sellerId;
-
-  // 画像のリストを作成（新旧データ両対応）
   const displayImages = item.imageUrls || [item.imageUrl];
 
   return (
     <div className="min-h-screen bg-gray-50 text-black pb-20">
       <Header />
       <div className="max-w-md mx-auto bg-white min-h-screen shadow-xl">
-        {/* 画像エリア */}
-        <div className="relative aspect-square bg-gray-100">
-<div className="flex w-full h-full overflow-x-auto snap-x snap-mandatory no-scrollbar">
-  {displayImages.map((url, index) => (
-    <div key={index} className="w-full h-full flex-shrink-0 snap-center">
-      <img 
-        src={url} 
-        className="w-full h-full object-cover" 
-        referrerPolicy="no-referrer"
-      />
-    </div>
-  ))}
-</div>
+        
+        {/* --- 画像エリア（矢印付き） --- */}
+        <div className="relative aspect-square bg-gray-100 group">
+          <div 
+            ref={scrollRef}
+            className="flex w-full h-full overflow-x-auto snap-x snap-mandatory no-scrollbar scroll-smooth"
+          >
+            {displayImages.map((url: string, index: number) => (
+              <div key={index} className="w-full h-full flex-shrink-0 snap-center">
+                <img 
+                  src={url} 
+                  className="w-full h-full object-cover" 
+                  alt={item.name}
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            ))}
+          </div>
+
+          {/* 複数枚ある場合のみ矢印と枚数表示を出す */}
+          {displayImages.length > 1 && (
+            <>
+              {/* 左矢印 */}
+              <button 
+                onClick={() => scroll("left")}
+                className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm transition-opacity opacity-0 group-hover:opacity-100 z-10"
+              >
+                <span className="text-lg">❮</span>
+              </button>
+
+              {/* 右矢印 */}
+              <button 
+                onClick={() => scroll("right")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm transition-opacity opacity-0 group-hover:opacity-100 z-10"
+              >
+                <span className="text-lg">❯</span>
+              </button>
+
+              {/* 枚数バッジ */}
+              <div className="absolute top-4 right-4 bg-black/50 text-white text-[10px] px-2 py-1 rounded-full font-bold backdrop-blur-sm z-10">
+                {displayImages.length}枚
+              </div>
+            </>
+          )}
+
           {item.isSold && (
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-20">
               <span className="text-white font-black text-4xl border-4 border-white p-4 -rotate-12">SOLD OUT</span>
             </div>
           )}
+          
           <button 
             onClick={toggleLike}
-            className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm p-3 rounded-full shadow-lg flex items-center gap-2 active:scale-90 transition"
+            className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm p-3 rounded-full shadow-lg flex items-center gap-2 active:scale-90 transition z-20"
           >
             <span className={isLiked ? "text-red-500" : "text-gray-400"}>{isLiked ? "❤️" : "🤍"}</span>
             <span className="text-xs font-bold">{item.likeCount || 0}</span>
@@ -162,15 +193,11 @@ export default function ItemDetail() {
         {/* 商品情報 */}
         <div className="p-6 border-b">
           <h1 className="text-2xl font-bold mb-1">{item.name}</h1>
-          
-          {/* 📍 出品者の活動エリアを表示 */}
           <div className="flex items-center gap-1 text-gray-500 text-xs mb-4 font-bold">
             <span className="text-red-500 text-sm">📍</span>
             <span>取引場所: {seller?.prefecture || "未設定"}</span>
           </div>
-
           <p className="text-3xl font-black text-red-600 mb-6">¥{item.price?.toLocaleString()}</p>
-          
           <div className="bg-gray-50 p-4 rounded-2xl mb-6">
             <h2 className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-widest">商品説明</h2>
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{item.description}</p>
@@ -192,7 +219,7 @@ export default function ItemDetail() {
             </Link>
           )}
 
-          {/* 出品者プロフィールカード */}
+          {/* 出品者プロフィール */}
           <div className="mt-10 p-5 bg-gray-50 rounded-[2rem] border border-gray-100 shadow-sm">
             <h3 className="text-[10px] font-bold text-gray-400 mb-4 tracking-widest uppercase">出品者プロフィール</h3>
             <div className="flex items-center gap-3 mb-3">
@@ -219,7 +246,6 @@ export default function ItemDetail() {
           <h2 className="text-sm font-bold mb-4 flex items-center gap-2">
             <span>💬</span> コメント ({comments.length})
           </h2>
-          
           <div className="space-y-4 mb-6">
             {comments.map((c) => (
               <div key={c.id} className={`flex gap-3 ${c.senderId === item.sellerId ? "flex-row-reverse" : ""}`}>
@@ -236,7 +262,6 @@ export default function ItemDetail() {
             ))}
             {comments.length === 0 && <p className="text-center text-xs text-gray-400 py-4 font-medium italic">コメントはまだありません</p>}
           </div>
-
           {!item.isSold && (
             <form onSubmit={handleSendComment} className="flex gap-2">
               <input 
