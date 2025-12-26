@@ -5,7 +5,7 @@ import { db, auth } from "@/lib/firebase/config";
 import { collection, doc, query, orderBy, onSnapshot, addDoc, serverTimestamp, getDoc, updateDoc } from "firebase/firestore";
 import { onAuthStateChanged, User } from "firebase/auth";
 
-// GASの設定（他のページと共通）
+// GASの設定
 const GAS_URL = "https://script.google.com/macros/s/AKfycby-ey-a-JVlePfdJiCRO_aSNfMgUYnwahAaYKyV4909p7Wq4LvbgEu2cplNTjlsdLkA/exec";
 const SECRET_API_KEY = "my-secret-token-777";
 
@@ -50,7 +50,6 @@ export default function ChatPage() {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // 画像圧縮ロジック
   const compressImage = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -62,7 +61,7 @@ export default function ChatPage() {
           const canvas = document.createElement("canvas");
           let width = img.width;
           let height = img.height;
-          const MAX_SIZE = 1000; // チャット用なので少し小さめに設定
+          const MAX_SIZE = 1000;
           if (width > height) { if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; } } 
           else { if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; } }
           canvas.width = width; canvas.height = height;
@@ -74,7 +73,6 @@ export default function ChatPage() {
     });
   };
 
-  // 画像送信処理
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user || chatInfo?.status === "closed") return;
@@ -137,7 +135,8 @@ export default function ChatPage() {
     <div className="flex flex-col h-screen bg-gray-50 text-black">
       <header className="bg-white p-4 shadow-sm font-bold flex items-center border-b justify-between sticky top-0 z-10">
         <div className="flex items-center">
-          <button onClick={() => router.push("/mypage")} className="mr-4 text-gray-500 text-xl">←</button>
+          {/* ★修正箇所: router.push("/mypage") を `/items/${id}` に変更 */}
+          <button onClick={() => router.push(`/items/${id}`)} className="mr-4 text-gray-500 text-xl active:scale-90 transition">←</button>
           <span className="text-base truncate max-w-[150px]">{chatInfo?.itemName || "取引チャット"}</span>
         </div>
         {user?.uid === chatInfo?.buyerId && chatInfo?.status !== "closed" && (
@@ -179,7 +178,6 @@ export default function ChatPage() {
       {chatInfo?.status !== "closed" && (
         <div className="p-4 bg-white border-t pb-8">
           <form onSubmit={sendMessage} className="flex gap-2 items-center">
-            {/* 画像選択ボタン */}
             <label className="flex-shrink-0 cursor-pointer p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition">
               <span className="text-xl">📷</span>
               <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={loading} />
