@@ -6,7 +6,6 @@ import { onAuthStateChanged, User } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 
-// GASのURLを最新のものに
 const GAS_URL = "https://script.google.com/macros/s/AKfycby-ey-a-JVlePfdJiCRO_aSNfMgUYnwahAaYKyV4909p7Wq4LvbgEu2cplNTjlsdLkA/exec";
 const SECRET_API_KEY = "my-secret-token-777";
 
@@ -14,8 +13,11 @@ export default function UploadPage() {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
-  const [image, setImage] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  
+  // --- 【修正】画像を配列で管理するように変更 ---
+  const [images, setImages] = useState<File[]>([]);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
+  
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -31,7 +33,6 @@ export default function UploadPage() {
     return () => unsubscribe();
   }, [router]);
 
-  // --- 【追加】画像をブラウザ側で圧縮する関数 ---
   const compressImage = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -43,28 +44,17 @@ export default function UploadPage() {
           const canvas = document.createElement("canvas");
           let width = img.width;
           let height = img.height;
-
-          // 商品画像は1200px程度あれば十分高精細
           const MAX_SIZE = 1200;
           if (width > height) {
-            if (width > MAX_SIZE) {
-              height *= MAX_SIZE / width;
-              width = MAX_SIZE;
-            }
+            if (width > MAX_SIZE) { height *= MAX_SIZE / width; width = MAX_SIZE; }
           } else {
-            if (height > MAX_SIZE) {
-              width *= MAX_SIZE / height;
-              height = MAX_SIZE;
-            }
+            if (height > MAX_SIZE) { width *= MAX_SIZE / height; height = MAX_SIZE; }
           }
-
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext("2d");
           if (!ctx) return reject("Canvas context error");
           ctx.drawImage(img, 0, 0, width, height);
-
-          // 画質0.7のJPEGに変換（劇的に軽くなります）
           const base64 = canvas.toDataURL("image/jpeg", 0.7);
           resolve(base64.split(",")[1]); 
         };
@@ -73,25 +63,35 @@ export default function UploadPage() {
     });
   };
 
+  // --- 【修正】複数ファイルを選択・追加できるように変更 ---
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setImage(file);
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
+    if (e.target.files) {
+      const selectedFiles = Array.from(e.target.files);
+      // 既存の画像リストに追加する
+      setImages((prev) => [...prev, ...selectedFiles]);
+
+      // プレビュー用URLを作成して追加
+      const newUrls = selectedFiles.map((file) => URL.createObjectURL(file));
+      setPreviewUrls((prev) => [...prev, ...newUrls]);
     }
+  };
+
+  // --- 【追加】選択した画像を削除する機能（あると便利です） ---
+  const removeImage = (index: number) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+    setPreviewUrls((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!image || !user || !name || !price || !description) {
-      alert("必須項目をすべて入力してください。");
+    // images.length でチェック
+    if (images.length === 0 || !user || !name || !price || !description) {
+      alert("画像と必須項目をすべて入力してください。");
       return;
     }
 
     setLoading(true);
     try {
-      // 1. ユーザーの地域情報を取得
       const userRef = doc(db, "users", user.uid);
       const userSnap = await getDoc(userRef);
       let userPrefecture = "地域不明";
@@ -99,31 +99,32 @@ export default function UploadPage() {
         userPrefecture = userSnap.data().prefecture || "地域不明";
       }
 
-      // 2. 画像の圧縮実行
-      const compressedBase64 = await compressImage(image);
+      // --- 【修正】画像の枚数分、GASへのアップロードを繰り返す ---
+      const uploadedUrls = [];
+      for (let i = 0; i < images.length; i++) {
+        const compressedBase64 = await compressImage(images[i]);
+        const response = await fetch(GAS_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({
+            key: SECRET_API_KEY,
+            img: compressedBase64,
+            type: "image/jpeg",
+          }),
+        });
 
-      // 3. GAS経由で画像をアップロード (キー名をGAS側に合わせる)
-      const response = await fetch(GAS_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({
-          key: SECRET_API_KEY,      // apiKey から key へ
-          img: compressedBase64,    // imageBase64 から img へ
-          type: "image/jpeg",       // 圧縮後は常にjpeg
-        }),
-      });
-
-      if (!response.ok) throw new Error("ネットワーク応答が正常ではありません");
-      
-      const result = await response.json();
-      if (result.error) throw new Error(result.error);
+        if (!response.ok) throw new Error(`${i + 1}枚目のアップロードに失敗しました`);
+        const result = await response.json();
+        if (result.error) throw new Error(result.error);
+        uploadedUrls.push(result.url); // 取得したURLを配列に入れる
+      }
 
       // 4. Firestoreに商品データを保存
       await addDoc(collection(db, "items"), {
         name,
         price: Number(price),
         description,
-        imageUrl: result.url,
+        imageUrls: uploadedUrls, // 【修正】単数(imageUrl)から複数(imageUrls)へ変更
         sellerId: user.uid,
         sellerName: user.displayName || "匿名ユーザー",
         sellerPrefecture: userPrefecture,
@@ -148,34 +149,43 @@ export default function UploadPage() {
       <Header />
       <main className="p-4 flex flex-col items-center">
         <div className="max-w-md w-full bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-          <h1 className="text-xl font-bold mb-6 text-red-600 font-sans tracking-tighter">📸 NOMIに出品する</h1>
+          <h1 className="text-xl font-bold mb-6 text-red-600 tracking-tighter">📸 NOMIに出品する</h1>
           
           <form onSubmit={handleUpload} className="space-y-6">
             <div>
-              <label className="block text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-widest">商品画像</label>
-              <div className="relative w-full aspect-square rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center group transition hover:border-red-200">
-                {previewUrl ? (
-                  <>
-                    <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                      <p className="text-white text-xs font-bold">変更する</p>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-center">
-                    <span className="text-4xl">📷</span>
-                    <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase tracking-widest">タップして追加</p>
+              <label className="block text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-widest">
+                商品画像（最大10枚程度推奨）
+              </label>
+              
+              {/* 【修正】横スクロールで複数枚表示できるUI */}
+              <div className="flex gap-2 overflow-x-auto pb-2 snap-x">
+                {previewUrls.map((url, index) => (
+                  <div key={index} className="relative w-32 h-32 flex-shrink-0 snap-start">
+                    <img src={url} alt="Preview" className="w-full h-full object-cover rounded-2xl border" />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full text-xs flex items-center justify-center shadow-lg"
+                    >
+                      ✕
+                    </button>
                   </div>
-                )}
-                <input 
-                  type="file" accept="image/*" 
-                  onChange={handleImageChange} 
-                  className="absolute inset-0 opacity-0 cursor-pointer" 
-                  required={!previewUrl}
-                />
+                ))}
+                
+                {/* 画像追加用の枠 */}
+                <label className="w-32 h-32 flex-shrink-0 rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 flex flex-col items-center justify-center cursor-pointer hover:border-red-200 transition">
+                  <span className="text-2xl text-gray-400">+</span>
+                  <p className="text-[8px] text-gray-400 font-bold uppercase">追加</p>
+                  <input 
+                    type="file" accept="image/*" multiple // 【重要】multipleを付与
+                    onChange={handleImageChange} 
+                    className="hidden" 
+                  />
+                </label>
               </div>
             </div>
 
+            {/* --- 以下、商品名などの入力欄は変更なし --- */}
             <div>
               <label className="block text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-widest">商品名</label>
               <input 
@@ -209,7 +219,7 @@ export default function UploadPage() {
                 loading ? "bg-gray-300" : "bg-black hover:bg-gray-800"
               }`}
             >
-              {loading ? "アップロード中..." : "出品を確定する"}
+              {loading ? `アップロード中 (${images.length}枚)...` : "出品を確定する"}
             </button>
           </form>
         </div>
