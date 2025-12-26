@@ -110,6 +110,12 @@ export default function ItemDetail() {
   };
 
   const handleDelete = async () => {
+    // ステータスが "completed"（取引完了）でもなく、かつ "isSold"（取引中）の場合は削除不可
+    if (item.isSold && item.status !== "completed") {
+      alert("取引進行中の商品は削除できません。取引を完了させるか、キャンセルが必要な場合は運営にお問い合わせください。");
+      return;
+    }
+
     if (!window.confirm("この出品を削除してもよろしいですか？")) return;
     try {
       await deleteDoc(doc(db, "items", id as string));
@@ -196,6 +202,7 @@ export default function ItemDetail() {
             <p className="text-[10px] text-center text-gray-400 font-bold mb-2">
               ⚠️ 決済・配送機能はありません。
             </p>
+  
             {isSeller ? (
               <>
                 {item.isSold && (
@@ -203,8 +210,21 @@ export default function ItemDetail() {
                     取引画面（チャット）へ
                   </Link>
                 )}
-                <Link href={`/items/${id}/edit`} className="block w-full bg-gray-800 text-white text-center font-bold py-4 rounded-2xl shadow-lg">商品の編集</Link>
-                <button onClick={handleDelete} className="w-full bg-white text-red-600 border-2 border-red-50 font-bold py-4 rounded-2xl">この出品を削除する</button>
+                
+                {(!item.isSold || item.status === "completed") ? (
+                  <>
+                    <Link href={`/items/${id}/edit`} className="block w-full bg-gray-800 text-white text-center font-bold py-4 rounded-2xl shadow-lg">
+                      商品の編集
+                    </Link>
+                    <button onClick={handleDelete} className="w-full bg-white text-red-600 border-2 border-red-50 font-bold py-4 rounded-2xl">
+                      この出品を削除する
+                    </button>
+                  </>
+                ) : (
+                  <div className="p-4 bg-gray-100 rounded-2xl text-center text-[10px] text-gray-500 font-bold">
+                    取引進行中のため、編集・削除はできません
+                  </div>
+                )}
               </>
             ) : isBuyer ? (
               <Link href={`/chat/${id}`} className="block w-full bg-green-600 text-white text-center font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition">
