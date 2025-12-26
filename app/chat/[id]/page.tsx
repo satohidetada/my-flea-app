@@ -22,19 +22,19 @@ export default function ChatPage() {
   const [rating, setRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
 
-  // クイック返信用のテンプレート
+  // クイック返信用のテンプレート（より安全な取引を促す内容に調整）
   const getTemplates = () => {
     if (user?.uid === chatInfo?.buyerId) {
       return [
-        "購入しました！よろしくお願いします。",
-        "受け渡しはいつ頃がご都合よろしいでしょうか？",
-        "駅前で待ち合わせはいかがですか？",
+        "購入しました！手渡しでお願いします。",
+        "駅の改札前で待ち合わせ可能ですか？",
+        "代金は受け取り時に現金でお支払いします。",
       ];
     } else {
       return [
         "ご購入ありがとうございます！",
-        "直近だと明日の夕方以降でしたら可能です。",
-        "詳しい場所をご相談させてください。",
+        "明日の午後、駅前広場での受け渡しはいかがですか？",
+        "お支払いは当日、商品確認後にお願いします。",
       ];
     }
   };
@@ -248,7 +248,16 @@ export default function ChatPage() {
 
       {chatInfo?.status === "active" || (chatInfo?.status === "buyer_reviewed" && user?.uid === chatInfo?.sellerId) ? (
         <div className="p-4 bg-white border-t pb-8">
-          {/* テンプレートチップの追加 */}
+          
+          {/* 安全のための警告バナー */}
+          <div className="mb-3 p-3 bg-amber-50 border border-amber-100 rounded-xl flex items-start gap-2 shadow-sm">
+            <span className="text-amber-500 text-xs">⚠️</span>
+            <p className="text-[9px] text-amber-800 leading-snug font-medium">
+              銀行振込などの<strong>「先払い」は禁止</strong>です。代金は必ず商品の受け取り時に<strong>現金で直接</strong>やり取りしてください。
+            </p>
+          </div>
+
+          {/* テンプレートチップ */}
           <div className="flex gap-2 overflow-x-auto pb-3 no-scrollbar">
             {getTemplates().map((tmp, idx) => (
               <button 
