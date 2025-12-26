@@ -43,24 +43,24 @@ export default function TokushoPage() {
               <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">商品代金以外に必要な費用</h2>
               <p className="text-sm font-bold">
                 現在はシステム利用料および販売手数料は無料です。<br />
-                ※通信料はユーザー様のご負担となります。
+                ※対面取引の際の交通費等はユーザー様のご負担となります。
               </p>
             </section>
 
             <section className="border-b border-gray-50 pb-4">
               <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">代金の支払い時期・方法</h2>
-              <p className="text-sm font-bold">購入確定時にお支払いいただきます。</p>
+              <p className="text-sm font-bold">アプリ内での購入確定時、または対面引渡時の直接支払いなど、ユーザー間で合意した方法によります。</p>
             </section>
 
             <section className="border-b border-gray-50 pb-4">
               <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">商品の引き渡し時期</h2>
-              <p className="text-sm font-bold">購入完了後、出品者と購入者間の協議により決定した期間内（通常1〜7日以内）に発送されます。</p>
+              <p className="text-sm font-bold">購入完了後、出品者と購入者間のチャット協議により決定した日時・場所にて、対面または合意した方法で引き渡されます。</p>
             </section>
 
             <section className="pb-4">
               <h2 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">返品・交換・キャンセル</h2>
               <p className="text-sm font-bold leading-relaxed">
-                売買契約成立後のキャンセルは原則として認められません。商品の不備等がある場合は、利用規約に基づき出品者と購入者の間で直接解決するものとします。
+                対面引渡時の商品確認後のキャンセルは原則として認められません。商品の不備等がある場合は、その場で確認を行うか、利用規約に基づき当事者間で直接解決するものとします。
               </p>
             </section>
           </div>
