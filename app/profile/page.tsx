@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { auth, db } from "@/lib/firebase/config";
 import { updateProfile, onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore"; // serverTimestampを追加
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 
@@ -31,14 +31,18 @@ export default function ProfileEdit() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
+        // Auth側の基本情報をセット
         setName(user.displayName || "");
         setPhotoURL(user.photoURL || "");
+        
+        // Firestore側の詳細情報をセット
         const docRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
           setPrefecture(data.prefecture || "東京都");
           setBio(data.bio || "");
+          // Firestore側に画像URLがあればそちらを優先（GAS経由のURL）
           if (data.photoURL) setPhotoURL(data.photoURL);
         }
       } else {
@@ -63,7 +67,6 @@ export default function ProfileEdit() {
           let width = img.width;
           let height = img.height;
 
-          // 最大幅を800pxに制限（プロフィール用ならこれで十分）
           const MAX_SIZE = 800;
           if (width > height) {
             if (width > MAX_SIZE) {
@@ -83,9 +86,10 @@ export default function ProfileEdit() {
           if (!ctx) return reject("Canvas context error");
           ctx.drawImage(img, 0, 0, width, height);
 
-          // 画質を0.6 (60%) に落としてJPEGに変換。これで劇的に軽くなる
           const base64 = canvas.toDataURL("image/jpeg", 0.6);
-          resolve(base64.split(",")[1]); // データ本体のみを抽出
+          resolve(base64.split(",")[1]);
+          // メモリ解放
+          img.onload = null;
         };
       };
       reader.onerror = (e) => reject(e);
@@ -96,18 +100,22 @@ export default function ProfileEdit() {
    * アップロード処理
    */
   const uploadImage = async (file: File) => {
+    // ファイル形式の簡易チェック
+    if (!file.type.startsWith("image/")) {
+      alert("画像ファイルを選択してください");
+      return;
+    }
+
     setUploading(true);
     try {
-      // 1. 送信する前に圧縮
       const compressedBase64 = await compressImage(file);
 
-      // 2. 圧縮後のデータを送信
       const res = await fetch(GAS_URL, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify({
           img: compressedBase64,
-          type: "image/jpeg", // 圧縮後は常にjpeg
+          type: "image/jpeg",
           key: SECRET_API_KEY,
         }),
       });
@@ -131,14 +139,18 @@ export default function ProfileEdit() {
     if (!user) return;
     setLoading(true);
     try {
+      // 1. Firebase Authプロフィールの更新
       await updateProfile(user, { displayName: name, photoURL: photoURL });
+      
+      // 2. Firestoreドキュメントの更新
       await setDoc(doc(db, "users", user.uid), {
         displayName: name,
         photoURL: photoURL,
         prefecture: prefecture,
         bio: bio,
-        updatedAt: new Date()
+        updatedAt: serverTimestamp() // クライアント時刻ではなくサーバー時刻を使用
       }, { merge: true });
+
       alert("プロフィールを更新しました！");
       router.push("/mypage");
     } catch (e: any) {
@@ -155,6 +167,7 @@ export default function ProfileEdit() {
         <h1 className="text-xl font-bold mb-6 tracking-tighter">プロフィール編集</h1>
         <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-gray-100 space-y-8">
           
+          {/* プロフィール画像セクション */}
           <div className="flex flex-col items-center gap-4">
             <div className="relative w-24 h-24 rounded-full overflow-hidden bg-gray-100 border-4 border-white shadow-sm flex items-center justify-center">
               {photoURL ? (
@@ -163,12 +176,12 @@ export default function ProfileEdit() {
                 <div className="text-4xl text-gray-300">👤</div>
               )}
               {uploading && (
-                <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-[10px] text-white font-bold">
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-[10px] text-white font-bold backdrop-blur-[1px]">
                   処理中...
                 </div>
               )}
             </div>
-            <label className="text-xs font-bold text-red-600 bg-red-50 px-4 py-2 rounded-full cursor-pointer hover:bg-red-100 transition shadow-sm">
+            <label className="text-xs font-bold text-red-600 bg-red-50 px-4 py-2 rounded-full cursor-pointer hover:bg-red-100 transition shadow-sm active:scale-95">
               {uploading ? "軽量化して送信中..." : "写真を変更"}
               <input 
                 type="file" 
@@ -183,7 +196,14 @@ export default function ProfileEdit() {
           <form onSubmit={handleUpdate} className="space-y-6">
             <div>
               <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">ニックネーム</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full border-b py-2 focus:border-red-500 outline-none text-lg bg-transparent" required />
+              <input 
+                type="text" 
+                value={name} 
+                onChange={(e) => setName(e.target.value)} 
+                className="w-full border-b py-2 focus:border-red-500 outline-none text-lg bg-transparent transition-colors" 
+                placeholder="例: たろう"
+                required 
+              />
             </div>
 
             <div>
@@ -191,7 +211,7 @@ export default function ProfileEdit() {
               <select 
                 value={prefecture} 
                 onChange={(e) => setPrefecture(e.target.value)}
-                className="w-full border-b py-2 bg-transparent outline-none text-lg"
+                className="w-full border-b py-2 bg-transparent outline-none text-lg cursor-pointer"
               >
                 {PREFECTURES.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
@@ -202,12 +222,16 @@ export default function ProfileEdit() {
               <textarea 
                 value={bio} 
                 onChange={(e) => setBio(e.target.value)}
-                placeholder="直接手渡し希望です！"
-                className="w-full border rounded-2xl p-4 mt-2 h-32 text-sm bg-gray-50 outline-none focus:border-red-500 transition resize-none"
+                placeholder="例: 週末に〇〇駅周辺で手渡し可能です。丁寧な対応を心がけます！"
+                className="w-full border rounded-2xl p-4 mt-2 h-32 text-sm bg-gray-50 outline-none focus:border-red-500 transition resize-none leading-relaxed"
               />
             </div>
             
-            <button type="submit" disabled={loading || uploading} className="w-full bg-black text-white font-bold py-4 rounded-2xl shadow-xl active:scale-95 transition disabled:bg-gray-300">
+            <button 
+              type="submit" 
+              disabled={loading || uploading} 
+              className="w-full bg-black text-white font-bold py-4 rounded-2xl shadow-xl active:scale-95 transition disabled:bg-gray-300 disabled:active:scale-100"
+            >
               {loading ? "保存中..." : "変更を確定する"}
             </button>
           </form>

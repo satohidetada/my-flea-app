@@ -14,6 +14,7 @@ export default function MyPage() {
   const [purchasedItems, setPurchasedItems] = useState<any[]>([]);
   const [likedItems, setLikedItems] = useState<any[]>([]);
   const [chats, setChats] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<any[]>([]); // 追加: レビュー用
   const [activeTab, setActiveTab] = useState("selling");
   const [loading, setLoading] = useState(true);
   const router = useRouter();
@@ -38,7 +39,7 @@ export default function MyPage() {
           const qSelling = query(collection(db, "items"), where("sellerId", "==", u.uid), orderBy("createdAt", "desc"));
           const snapSelling = await getDocs(qSelling);
           setSellingItems(snapSelling.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-        } catch (e) { console.error("Selling items error (Index might be missing):", e); }
+        } catch (e) { console.error("Selling items error:", e); }
 
         // 3. 購入済の商品
         try {
@@ -74,6 +75,16 @@ export default function MyPage() {
           setChats(snapChats.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         } catch (e) { console.error("Chat error:", e); }
 
+        // 6. 評価（レビュー）の取得 ★追加
+        try {
+          const qReviews = query(
+            collection(db, "users", u.uid, "reviews"),
+            orderBy("createdAt", "desc")
+          );
+          const snapReviews = await getDocs(qReviews);
+          setReviews(snapReviews.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        } catch (e) { console.error("Reviews error:", e); }
+
         setLoading(false);
       } else {
         router.push("/login");
@@ -81,6 +92,11 @@ export default function MyPage() {
     });
     return () => unsubscribe();
   }, [router]);
+
+  // 平均スコアの計算 ★追加
+  const averageRating = reviews.length > 0 
+    ? (reviews.reduce((acc, cur) => acc + cur.rating, 0) / reviews.length).toFixed(1)
+    : "0.0";
 
   const handleLogout = async () => {
     if(confirm("ログアウトしますか？")) {
@@ -149,7 +165,6 @@ export default function MyPage() {
                 src={profile?.photoURL || user?.photoURL} 
                 className="w-full h-full object-cover" 
                 alt="Profile"
-                key={profile?.photoURL}
               />
             ) : (
               <div className="text-gray-300 text-4xl">👤</div>
@@ -158,19 +173,24 @@ export default function MyPage() {
           
           <h2 className="text-xl font-bold mb-1">{profile?.displayName || user?.displayName || "ユーザー"}</h2>
           
+          {/* 評価の表示 ★追加 */}
+          <div className="flex items-center gap-1 mb-2">
+            <span className="text-yellow-400 text-sm">⭐</span>
+            <span className="text-sm font-black">{averageRating}</span>
+            <span className="text-gray-400 text-[10px] ml-1 font-bold">({reviews.length}件の評価)</span>
+          </div>
+
           <div className="flex items-center gap-1 text-gray-400 text-xs mb-3 font-bold">
             <span className="text-red-500">📍</span>
             <span>{profile?.prefecture || "活動エリア未設定"}</span>
           </div>
           {profile?.bio && <p className="text-xs text-gray-600 text-center leading-relaxed mb-6 px-4 italic whitespace-pre-wrap">{profile.bio}</p>}
           
-          {/* プロフィール編集・ログアウトボタン */}
           <div className="flex gap-2 w-full max-w-xs mb-4">
             <Link href="/profile" className="flex-1 bg-gray-900 text-white text-center py-3 rounded-2xl text-xs font-bold active:scale-95 transition">プロフィール編集</Link>
             <button onClick={handleLogout} className="flex-1 border border-gray-200 text-gray-400 py-3 rounded-2xl text-xs font-bold active:scale-95 transition">ログアウト</button>
           </div>
 
-          {/* ★ 追加: お問い合わせリンク */}
           <Link 
             href="/contact" 
             className="w-full max-w-xs bg-gray-50 text-gray-500 text-center py-3 rounded-2xl text-[10px] font-bold border border-gray-100 active:scale-95 transition flex items-center justify-center gap-2"
@@ -179,11 +199,13 @@ export default function MyPage() {
           </Link>
         </div>
 
+        {/* タブ一覧の修正 ★評価を追加 */}
         <div className="flex border-b border-gray-200 mb-6 bg-white rounded-t-2xl px-2">
           {[
             { id: "selling", label: "出品", count: sellingItems.length },
             { id: "chat", label: "取引中", count: chats.filter(c => c.status !== "closed").length },
             { id: "purchased", label: "取引済", count: purchasedItems.length },
+            { id: "review", label: "評価", count: reviews.length }, // 追加
             { id: "liked", label: "いいね", count: likedItems.length }
           ].map(tab => (
             <button
@@ -224,9 +246,31 @@ export default function MyPage() {
             </div>
           )}
 
+          {/* ★ 追加: 評価タブの内容 */}
+          {activeTab === "review" && (
+            <div className="space-y-3">
+              {reviews.map((rev) => (
+                <div key={rev.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-yellow-400 text-xs">{"⭐".repeat(rev.rating)}</span>
+                      <span className="text-[10px] font-bold text-gray-800">{rev.fromName}</span>
+                    </div>
+                    <span className="text-[8px] text-gray-300 font-bold uppercase">
+                      {rev.createdAt?.toDate()?.toLocaleDateString() || ""}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 leading-relaxed mb-2 font-medium">{rev.comment || "コメントなし"}</p>
+                  <p className="text-[9px] text-gray-300 font-bold">対象商品: {rev.itemName}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
           {((activeTab === "selling" && sellingItems.length === 0) ||
             (activeTab === "chat" && chats.length === 0) ||
             (activeTab === "purchased" && purchasedItems.length === 0) ||
+            (activeTab === "review" && reviews.length === 0) || // 追加
             (activeTab === "liked" && likedItems.length === 0)) && (
             <div className="py-20 text-center text-gray-400 text-sm bg-white rounded-b-3xl border border-dashed border-gray-200 font-bold">
               表示する項目がありません

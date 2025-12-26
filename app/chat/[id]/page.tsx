@@ -19,6 +19,11 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // --- 追加: 評価用ステート ---
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [reviewComment, setReviewComment] = useState("");
+
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (u) => {
       if (!u) { router.push("/"); return; }
@@ -117,15 +122,41 @@ export default function ChatPage() {
     });
   };
 
-  const completeTransaction = async () => {
-    if (!window.confirm("受取評価をして取引を完了しますか？\n完了するとメッセージが送れなくなります。")) return;
+  // --- 追加: 評価を投稿して取引を完了する ---
+  const handleSubmitReview = async () => {
+    if (!user || !chatInfo) return;
     setLoading(true);
     try {
+      // 1. 相手（出品者）の評価コレクションに保存
+      await addDoc(collection(db, "users", chatInfo.sellerId, "reviews"), {
+        fromId: user.uid,
+        fromName: user.displayName || "匿名ユーザー",
+        rating: rating,
+        comment: reviewComment,
+        itemId: chatInfo.itemId,
+        itemName: chatInfo.itemName,
+        createdAt: serverTimestamp(),
+      });
+
+      // 2. チャットと商品のステータスを更新
       await updateDoc(doc(db, "chats", id as string), { status: "closed" });
-      await updateDoc(doc(db, "items", id as string), { status: "completed" });
-      alert("取引が完了しました！");
+      await updateDoc(doc(db, "items", chatInfo.itemId), { status: "completed" });
+
+      // 3. 出品者へ「評価が届きました」通知
+      await addDoc(collection(db, "users", chatInfo.sellerId, "notifications"), {
+        type: "review",
+        title: "評価が届きました！",
+        body: `「${chatInfo.itemName}」の取引相手から評価が届きました。`,
+        link: "/mypage",
+        isRead: false,
+        createdAt: serverTimestamp(),
+      });
+
+      alert("取引が完了しました！評価ありがとうございます。");
+      setShowReviewModal(false);
     } catch (err) {
-      alert("エラーが発生しました。");
+      console.error(err);
+      alert("処理中にエラーが発生しました。");
     } finally {
       setLoading(false);
     }
@@ -135,12 +166,14 @@ export default function ChatPage() {
     <div className="flex flex-col h-screen bg-gray-50 text-black">
       <header className="bg-white p-4 shadow-sm font-bold flex items-center border-b justify-between sticky top-0 z-10">
         <div className="flex items-center">
-          {/* ★修正箇所: router.push("/mypage") を `/items/${id}` に変更 */}
           <button onClick={() => router.push(`/items/${id}`)} className="mr-4 text-gray-500 text-xl active:scale-90 transition">←</button>
           <span className="text-base truncate max-w-[150px]">{chatInfo?.itemName || "取引チャット"}</span>
         </div>
         {user?.uid === chatInfo?.buyerId && chatInfo?.status !== "closed" && (
-          <button onClick={completeTransaction} disabled={loading} className="bg-red-600 text-white text-xs px-3 py-2 rounded-lg font-bold active:scale-95 transition">
+          <button 
+            onClick={() => setShowReviewModal(true)} 
+            className="bg-red-600 text-white text-xs px-3 py-2 rounded-lg font-bold active:scale-95 transition"
+          >
             受取評価する
           </button>
         )}
@@ -197,6 +230,52 @@ export default function ChatPage() {
               送信
             </button>
           </form>
+        </div>
+      )}
+
+      {/* --- 追加: 評価モーダル --- */}
+      {showReviewModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-in fade-in zoom-in duration-200">
+            <h2 className="text-xl font-black text-center mb-6">受取評価</h2>
+            
+            <p className="text-[10px] text-gray-400 font-bold text-center mb-4 uppercase tracking-widest">出品者の評価</p>
+            
+            <div className="flex justify-center gap-2 mb-8">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button 
+                  key={star} 
+                  onClick={() => setRating(star)}
+                  className={`text-3xl transition ${rating >= star ? "grayscale-0" : "grayscale opacity-30"}`}
+                >
+                  ⭐
+                </button>
+              ))}
+            </div>
+
+            <textarea 
+              value={reviewComment}
+              onChange={(e) => setReviewComment(e.target.value)}
+              placeholder="取引の感想を教えてください（任意）"
+              className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm outline-none focus:border-red-500 mb-6 h-32 resize-none"
+            />
+
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={handleSubmitReview}
+                disabled={loading}
+                className="w-full bg-red-600 text-white py-4 rounded-2xl font-bold shadow-lg active:scale-95 transition disabled:bg-gray-300"
+              >
+                {loading ? "送信中..." : "評価を送信して取引完了"}
+              </button>
+              <button 
+                onClick={() => setShowReviewModal(false)}
+                className="w-full text-gray-400 text-xs font-bold py-2"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
