@@ -91,9 +91,7 @@ export default function MyPage() {
 
   if (loading) return <div className="p-10 text-center text-black font-bold">読み込み中...</div>;
 
-  // --- 商品カードコンポーネント (画像表示ロジックのみ修正) ---
   const ItemCard = ({ item }: { item: any }) => {
-    // imageUrls(配列)がある場合は0番目、なければ従来のimageUrl(文字列)を使用
     const displayThumbnail = (item.imageUrls && item.imageUrls.length > 0) 
       ? item.imageUrls[0] 
       : item.imageUrl;
@@ -166,10 +164,19 @@ export default function MyPage() {
           </div>
           {profile?.bio && <p className="text-xs text-gray-600 text-center leading-relaxed mb-6 px-4 italic whitespace-pre-wrap">{profile.bio}</p>}
           
-          <div className="flex gap-2 w-full max-w-xs">
+          {/* プロフィール編集・ログアウトボタン */}
+          <div className="flex gap-2 w-full max-w-xs mb-4">
             <Link href="/profile" className="flex-1 bg-gray-900 text-white text-center py-3 rounded-2xl text-xs font-bold active:scale-95 transition">プロフィール編集</Link>
             <button onClick={handleLogout} className="flex-1 border border-gray-200 text-gray-400 py-3 rounded-2xl text-xs font-bold active:scale-95 transition">ログアウト</button>
           </div>
+
+          {/* ★ 追加: お問い合わせリンク */}
+          <Link 
+            href="/contact" 
+            className="w-full max-w-xs bg-gray-50 text-gray-500 text-center py-3 rounded-2xl text-[10px] font-bold border border-gray-100 active:scale-95 transition flex items-center justify-center gap-2"
+          >
+            <span>💡</span> アプリへのご意見・ご要望はこちら
+          </Link>
         </div>
 
         <div className="flex border-b border-gray-200 mb-6 bg-white rounded-t-2xl px-2">
