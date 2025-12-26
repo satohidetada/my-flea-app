@@ -38,7 +38,13 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-gray-100 px-4 py-3 flex justify-between items-center shadow-sm">
-      <Link href="/" className="text-2xl font-black text-red-600 tracking-tighter">NOMI</Link>
+      {/* 左側：ロゴとキャッチコピー */}
+      <div className="flex items-baseline gap-2">
+        <Link href="/" className="text-2xl font-black text-red-600 tracking-tighter">NOMI</Link>
+        <span className="text-[10px] font-bold text-gray-400 leading-none pb-0.5 hidden xs:inline">
+          梱包いらず、手軽な街の蚤の市
+        </span>
+      </div>
       
       <div className="flex items-center gap-4">
         {user ? (
