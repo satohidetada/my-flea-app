@@ -22,6 +22,23 @@ export default function ChatPage() {
   const [rating, setRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
 
+  // クイック返信用のテンプレート
+  const getTemplates = () => {
+    if (user?.uid === chatInfo?.buyerId) {
+      return [
+        "購入しました！よろしくお願いします。",
+        "受け渡しはいつ頃がご都合よろしいでしょうか？",
+        "駅前の広場で待ち合わせはいかがですか？",
+      ];
+    } else {
+      return [
+        "ご購入ありがとうございます！",
+        "直近だと明日の夕方以降でしたら可能です。",
+        "詳しい場所をご相談させてください。",
+      ];
+    }
+  };
+
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (u) => {
       if (!u) { router.push("/"); return; }
@@ -105,11 +122,11 @@ export default function ChatPage() {
     }
   };
 
-  const sendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || !user || chatInfo?.status === "closed") return;
+  const sendMessage = async (e?: React.FormEvent, customText?: string) => {
+    e?.preventDefault();
+    const text = customText || input;
+    if (!text.trim() || !user || chatInfo?.status === "closed") return;
     
-    const text = input;
     setInput("");
 
     await addDoc(collection(db, "chats", id as string, "messages"), {
@@ -120,7 +137,6 @@ export default function ChatPage() {
     });
   };
 
-  // --- 修正: お互いに評価するロジック ---
   const handleSubmitReview = async () => {
     if (!user || !chatInfo) return;
     setLoading(true);
@@ -130,7 +146,6 @@ export default function ChatPage() {
     const targetItemId = chatInfo.itemId || id;
 
     try {
-      // 1. 相手の評価コレクションに保存
       await addDoc(collection(db, "users", targetUserId, "reviews"), {
         fromId: user.uid,
         fromName: user.displayName || "匿名ユーザー",
@@ -141,8 +156,6 @@ export default function ChatPage() {
         createdAt: serverTimestamp(),
       });
 
-      // 2. ステータスの決定
-      // 購入者が評価 -> 出品者の評価待ちへ。 出品者が評価 -> 取引完了へ。
       const nextStatus = isBuyer ? "buyer_reviewed" : "closed";
 
       await updateDoc(doc(db, "chats", id as string), { 
@@ -150,12 +163,10 @@ export default function ChatPage() {
         updatedAt: serverTimestamp()
       });
 
-      // 最終完了時のみ商品のステータスを更新
       if (nextStatus === "closed") {
         await updateDoc(doc(db, "items", targetItemId as string), { status: "completed" });
       }
 
-      // 3. 相手へ通知
       await addDoc(collection(db, "users", targetUserId, "notifications"), {
         type: "review",
         title: "評価が届きました！",
@@ -184,7 +195,6 @@ export default function ChatPage() {
           <span className="text-base truncate max-w-[150px]">{chatInfo?.itemName || "取引チャット"}</span>
         </div>
         
-        {/* ボタンの出し分けロジック修正 */}
         {chatInfo?.status !== "closed" && (
           <>
             {user?.uid === chatInfo?.buyerId && chatInfo?.status === "active" && (
@@ -223,7 +233,6 @@ export default function ChatPage() {
           );
         })}
 
-        {/* ステータスメッセージの追加 */}
         {chatInfo?.status === "buyer_reviewed" && user?.uid === chatInfo?.buyerId && (
           <div className="bg-blue-50 text-blue-600 p-4 rounded-2xl text-center text-xs font-bold border border-blue-100">
             出品者の評価待ちです
@@ -239,6 +248,19 @@ export default function ChatPage() {
 
       {chatInfo?.status === "active" || (chatInfo?.status === "buyer_reviewed" && user?.uid === chatInfo?.sellerId) ? (
         <div className="p-4 bg-white border-t pb-8">
+          {/* テンプレートチップの追加 */}
+          <div className="flex gap-2 overflow-x-auto pb-3 no-scrollbar">
+            {getTemplates().map((tmp, idx) => (
+              <button 
+                key={idx}
+                onClick={() => setInput(tmp)}
+                className="whitespace-nowrap bg-gray-50 border border-gray-100 text-[10px] px-3 py-1.5 rounded-full font-bold text-gray-500 hover:bg-gray-100 transition active:scale-95"
+              >
+                {tmp}
+              </button>
+            ))}
+          </div>
+
           <form onSubmit={sendMessage} className="flex gap-2 items-center">
             <label className="flex-shrink-0 cursor-pointer p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition">
               <span className="text-xl">📷</span>
