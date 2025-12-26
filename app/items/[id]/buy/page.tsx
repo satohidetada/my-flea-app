@@ -20,7 +20,7 @@ export default function BuyConfirm() {
     const currentUser = auth.currentUser;
     if (!currentUser || !item) return;
 
-    // ★ ここで確認ダイアログを表示
+    // 確認ダイアログ
     const ok = window.confirm(`「${item.name}」を購入しますか？\n※この操作は取り消せません。`);
     if (!ok) return;
 
@@ -43,18 +43,18 @@ export default function BuyConfirm() {
         updatedAt: serverTimestamp(),
       }, { merge: true });
 
-// 3. 通知データを作成（保存先を /users/出品者ID/notifications に変更）
-await addDoc(collection(db, "users", item.sellerId, "notifications"), {
-  type: "buy", // あとで判別しやすいように追加
-  title: "商品が売れました！",
-  body: `「${item.name}」が購入されました。`,
-  link: `/chat/${id}`,
-  isRead: false,
-  createdAt: serverTimestamp(),
-});
+      // 3. 通知データを作成
+      await addDoc(collection(db, "users", item.sellerId, "notifications"), {
+        type: "buy",
+        title: "商品が売れました！",
+        body: `「${item.name}」が購入されました。`,
+        link: `/chat/${id}`,
+        isRead: false,
+        createdAt: serverTimestamp(),
+      });
 
       alert("購入が完了しました！");
-      router.push(`/chat/${id}`); // 購入後はそのままチャットへ飛ばすのがスムーズです
+      router.push(`/chat/${id}`);
 
     } catch (error: any) {
       alert("エラー: " + error.message);
@@ -65,13 +65,26 @@ await addDoc(collection(db, "users", item.sellerId, "notifications"), {
 
   if (!item) return <div className="p-10 text-center text-black">読み込み中...</div>;
 
+  // 画像の表示ロジック：imageUrls配列があれば0番目、なければ従来のimageUrl
+  const displayThumbnail = (item.imageUrls && item.imageUrls.length > 0) 
+    ? item.imageUrls[0] 
+    : item.imageUrl;
+
   return (
     <main className="min-h-screen bg-gray-50 text-black p-4 flex flex-col items-center justify-center">
       <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl border">
         <h1 className="text-xl font-bold mb-6 text-center text-red-600">購入内容の最終確認</h1>
         
-        <div className="flex gap-4 mb-8 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-          <img src={item.imageUrl} className="w-20 h-20 object-cover rounded-xl shadow-sm" alt="" />
+        <div className="flex gap-4 mb-8 p-4 bg-gray-50 rounded-2xl border border-gray-100 items-center">
+          {/* 画像表示部分を修正 */}
+          <div className="w-20 h-20 flex-shrink-0 bg-gray-200 rounded-xl overflow-hidden shadow-sm">
+            <img 
+              src={displayThumbnail} 
+              className="w-full h-full object-cover" 
+              alt={item.name}
+              referrerPolicy="no-referrer"
+            />
+          </div>
           <div className="flex flex-col justify-center">
             <p className="font-bold text-sm text-gray-700">{item.name}</p>
             <p className="text-red-600 font-extrabold text-xl">¥{item.price?.toLocaleString()}</p>
