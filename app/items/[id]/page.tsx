@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef } from "react"; // useRefを追加
+import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { db, auth } from "@/lib/firebase/config";
 import { 
@@ -19,7 +19,6 @@ export default function ItemDetail() {
   const [comments, setComments] = useState<any[]>([]); 
   const [newComment, setNewComment] = useState("");   
   
-  // スクロールを制御するための変数
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -58,7 +57,6 @@ export default function ItemDetail() {
     return () => { unsubItem(); unsubComments(); unsubAuth(); };
   }, [id]);
 
-  // 矢印ボタンを押した時のスクロール処理
   const scroll = (direction: "left" | "right") => {
     if (scrollRef.current) {
       const { scrollLeft, clientWidth } = scrollRef.current;
@@ -123,7 +121,9 @@ export default function ItemDetail() {
   };
 
   if (!item) return <div className="p-10 text-center text-black font-bold">読み込み中...</div>;
+  
   const isSeller = user?.uid === item.sellerId;
+  const isBuyer = user?.uid === item.buyerId; // 追加: 購入者かどうか
   const displayImages = item.imageUrls || [item.imageUrl];
 
   return (
@@ -131,7 +131,6 @@ export default function ItemDetail() {
       <Header />
       <div className="max-w-md mx-auto bg-white min-h-screen shadow-xl">
         
-        {/* --- 画像エリア（矢印付き） --- */}
         <div className="relative aspect-square bg-gray-100 group">
           <div 
             ref={scrollRef}
@@ -149,26 +148,14 @@ export default function ItemDetail() {
             ))}
           </div>
 
-          {/* 複数枚ある場合のみ矢印と枚数表示を出す */}
           {displayImages.length > 1 && (
             <>
-              {/* 左矢印 */}
-              <button 
-                onClick={() => scroll("left")}
-                className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm transition-opacity opacity-0 group-hover:opacity-100 z-10"
-              >
+              <button onClick={() => scroll("left")} className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm transition-opacity opacity-0 group-hover:opacity-100 z-10">
                 <span className="text-lg">❮</span>
               </button>
-
-              {/* 右矢印 */}
-              <button 
-                onClick={() => scroll("right")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm transition-opacity opacity-0 group-hover:opacity-100 z-10"
-              >
+              <button onClick={() => scroll("right")} className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/30 hover:bg-black/50 text-white w-8 h-8 rounded-full flex items-center justify-center backdrop-blur-sm transition-opacity opacity-0 group-hover:opacity-100 z-10">
                 <span className="text-lg">❯</span>
               </button>
-
-              {/* 枚数バッジ */}
               <div className="absolute top-4 right-4 bg-black/50 text-white text-[10px] px-2 py-1 rounded-full font-bold backdrop-blur-sm z-10">
                 {displayImages.length}枚
               </div>
@@ -190,7 +177,6 @@ export default function ItemDetail() {
           </button>
         </div>
 
-        {/* 商品情報 */}
         <div className="p-6 border-b">
           <h1 className="text-2xl font-bold mb-1">{item.name}</h1>
           <div className="flex items-center gap-1 text-gray-500 text-xs mb-4 font-bold">
@@ -203,23 +189,38 @@ export default function ItemDetail() {
             <p className="text-sm leading-relaxed whitespace-pre-wrap">{item.description}</p>
           </div>
 
-          {isSeller ? (
-            <div className="space-y-3">
-              <Link href={`/items/${id}/edit`} className="block w-full bg-gray-800 text-white text-center font-bold py-4 rounded-2xl shadow-lg">商品の編集</Link>
-              <button onClick={handleDelete} className="w-full bg-white text-red-600 border-2 border-red-50 font-bold py-4 rounded-2xl">この出品を削除する</button>
-            </div>
-          ) : (
-            <Link 
-              href={item.isSold ? "#" : `/items/${id}/buy`}
-              className={`block w-full text-center font-bold py-4 rounded-2xl shadow-lg transition ${
-                item.isSold ? "bg-gray-300 cursor-not-allowed" : "bg-red-600 text-white active:scale-95"
-              }`}
-            >
-              {item.isSold ? "売り切れました" : "購入手続きへ"}
-            </Link>
-          )}
+          {/* --- ボタンエリアの修正 --- */}
+          <div className="space-y-3">
+            {isSeller ? (
+              <>
+                {/* 出品者かつ売却済みの場合は取引画面へのボタンも出す */}
+                {item.isSold && (
+                  <Link href={`/chat/${id}`} className="block w-full bg-green-600 text-white text-center font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition">
+                    取引画面（チャット）へ
+                  </Link>
+                )}
+                <Link href={`/items/${id}/edit`} className="block w-full bg-gray-800 text-white text-center font-bold py-4 rounded-2xl shadow-lg">商品の編集</Link>
+                <button onClick={handleDelete} className="w-full bg-white text-red-600 border-2 border-red-50 font-bold py-4 rounded-2xl">この出品を削除する</button>
+              </>
+            ) : isBuyer ? (
+              /* 購入者の場合は取引画面へのボタンを表示 */
+              <Link href={`/chat/${id}`} className="block w-full bg-green-600 text-white text-center font-bold py-4 rounded-2xl shadow-lg active:scale-95 transition">
+                取引画面（チャット）へ戻る
+              </Link>
+            ) : (
+              /* 第三者の場合 */
+              <Link 
+                href={item.isSold ? "#" : `/items/${id}/buy`}
+                className={`block w-full text-center font-bold py-4 rounded-2xl shadow-lg transition ${
+                  item.isSold ? "bg-gray-300 cursor-not-allowed" : "bg-red-600 text-white active:scale-95"
+                }`}
+              >
+                {item.isSold ? "売り切れました" : "購入手続きへ"}
+              </Link>
+            )}
+          </div>
+          {/* --- ここまで修正 --- */}
 
-          {/* 出品者プロフィール */}
           <div className="mt-10 p-5 bg-gray-50 rounded-[2rem] border border-gray-100 shadow-sm">
             <h3 className="text-[10px] font-bold text-gray-400 mb-4 tracking-widest uppercase">出品者プロフィール</h3>
             <div className="flex items-center gap-3 mb-3">
@@ -241,7 +242,6 @@ export default function ItemDetail() {
           </div>
         </div>
 
-        {/* コメントセクション */}
         <div className="p-6 bg-gray-50">
           <h2 className="text-sm font-bold mb-4 flex items-center gap-2">
             <span>💬</span> コメント ({comments.length})
