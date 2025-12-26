@@ -11,21 +11,22 @@ export default function ContactPage() {
       <main className="max-w-md mx-auto p-6">
         <header className="text-center mb-8 pt-4">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            💡 お問い合わせ・要望
+            📩 お問い合わせ
           </h1>
           <p className="text-xs text-gray-500">
-            NOMIをより良くするためのご意見をお聞かせください。
+            不具合・要望、または特定商取引法に基づく表記の開示請求はこちら。
           </p>
         </header>
 
         <div className="bg-white shadow-sm border border-gray-100 rounded-3xl p-6">
           <form 
-  action={FORMSPREE_URL} 
-  method="POST" 
-  className="space-y-6"
->
-  {/* ★ この1行を追加（valueを自分のアプリのURLに変更してください） */}
-  <input type="hidden" name="_next" value="https://your-app-name.vercel.app/" />
+            action={FORMSPREE_URL} 
+            method="POST" 
+            className="space-y-6"
+          >
+            {/* ★ valueを自分のアプリのURLに変更してください */}
+            <input type="hidden" name="_next" value="https://your-app-name.vercel.app/contact" />
+            
             {/* お名前 */}
             <div>
               <label htmlFor="name" className="block text-[10px] font-bold text-gray-400 uppercase ml-1 mb-1 tracking-widest">
@@ -35,6 +36,7 @@ export default function ContactPage() {
                 type="text"
                 name="name"
                 id="name"
+                required
                 placeholder="メルカリ 太郎"
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-red-500 transition text-sm text-black"
               />
@@ -43,12 +45,13 @@ export default function ContactPage() {
             {/* メールアドレス */}
             <div>
               <label htmlFor="email" className="block text-[10px] font-bold text-gray-400 uppercase ml-1 mb-1 tracking-widest">
-                メールアドレス
+                返信用メールアドレス
               </label>
               <input
                 type="email"
                 name="email"
                 id="email"
+                required
                 placeholder="example@nomi.com"
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-red-500 transition text-sm text-black"
               />
@@ -64,7 +67,7 @@ export default function ContactPage() {
                 id="message"
                 rows={6}
                 required
-                placeholder="不具合の報告や、追加してほしい機能などをご記入ください。"
+                placeholder="不具合の報告や要望、特商法に基づく情報開示を希望される場合はその旨をご記入ください。"
                 className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl outline-none focus:border-red-500 transition text-sm text-black resize-none"
               />
             </div>

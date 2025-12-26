@@ -194,18 +194,25 @@ function MyPageContent() {
             <span>💡</span> アプリへのご意見・ご要望はこちら
           </Link>
 
-          <div className="w-full max-w-xs grid grid-cols-2 gap-2">
+          {/* ★ grid-cols-3 に変更して特商法を追加 */}
+          <div className="w-full max-w-xs grid grid-cols-3 gap-2">
             <Link 
               href="/terms" 
-              className="bg-gray-100 text-gray-600 text-center py-2.5 rounded-xl text-[10px] font-bold active:scale-95 transition border border-gray-200"
+              className="bg-gray-100 text-gray-600 text-center py-2.5 rounded-xl text-[9px] font-bold active:scale-95 transition border border-gray-200"
             >
               利用規約
             </Link>
             <Link 
               href="/privacy" 
-              className="bg-gray-100 text-gray-600 text-center py-2.5 rounded-xl text-[10px] font-bold active:scale-95 transition border border-gray-200"
+              className="bg-gray-100 text-gray-600 text-center py-2.5 rounded-xl text-[9px] font-bold active:scale-95 transition border border-gray-200"
             >
               プライバシー
+            </Link>
+            <Link 
+              href="/tokusho" 
+              className="bg-gray-100 text-gray-600 text-center py-2.5 rounded-xl text-[9px] font-bold active:scale-95 transition border border-gray-200"
+            >
+              特商法
             </Link>
           </div>
           
