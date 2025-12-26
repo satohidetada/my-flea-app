@@ -125,13 +125,26 @@ export default function ItemDetail() {
   if (!item) return <div className="p-10 text-center text-black font-bold">読み込み中...</div>;
   const isSeller = user?.uid === item.sellerId;
 
+  // 画像のリストを作成（新旧データ両対応）
+  const displayImages = item.imageUrls || [item.imageUrl];
+
   return (
     <div className="min-h-screen bg-gray-50 text-black pb-20">
       <Header />
       <div className="max-w-md mx-auto bg-white min-h-screen shadow-xl">
         {/* 画像エリア */}
         <div className="relative aspect-square bg-gray-100">
-          <img src={item.imageUrl} className="w-full h-full object-cover" />
+<div className="flex w-full h-full overflow-x-auto snap-x snap-mandatory no-scrollbar">
+  {displayImages.map((url, index) => (
+    <div key={index} className="w-full h-full flex-shrink-0 snap-center">
+      <img 
+        src={url} 
+        className="w-full h-full object-cover" 
+        referrerPolicy="no-referrer"
+      />
+    </div>
+  ))}
+</div>
           {item.isSold && (
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
               <span className="text-white font-black text-4xl border-4 border-white p-4 -rotate-12">SOLD OUT</span>
